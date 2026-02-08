@@ -1,0 +1,732 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>G O R I L L A S - QBasic Classic</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&display=swap');
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: #000;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    font-family: 'VT323', monospace;
+    color: #aaa;
+    overflow: hidden;
+  }
+
+  #gameContainer {
+    position: relative;
+    border: 2px solid #333;
+    box-shadow: 0 0 30px rgba(0, 50, 200, 0.15);
+  }
+
+  canvas {
+    display: block;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  #ui-overlay {
+    position: absolute;
+    top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none;
+    display: flex;
+    flex-direction: column;
+  }
+
+  #scoreboard {
+    display: flex;
+    justify-content: space-between;
+    padding: 6px 16px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 11px;
+    color: #fff;
+    background: rgba(0,0,0,0.6);
+    pointer-events: none;
+  }
+
+  .score-p1 { color: #ff6; }
+  .score-p2 { color: #f66; }
+
+  #input-panel {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    pointer-events: all;
+    background: rgba(0, 0, 80, 0.85);
+    border: 2px solid #44f;
+    padding: 8px 16px;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    color: #fff;
+  }
+
+  #input-panel.hidden { display: none; }
+
+  #input-panel label { color: #aaf; }
+
+  #input-panel input {
+    width: 65px;
+    background: #001;
+    border: 1px solid #44f;
+    color: #fff;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    padding: 2px 6px;
+    text-align: center;
+  }
+
+  #input-panel input:focus { outline: 1px solid #88f; }
+
+  #input-panel button {
+    background: #22a;
+    border: 2px solid #44f;
+    color: #fff;
+    font-family: 'VT323', monospace;
+    font-size: 20px;
+    padding: 4px 16px;
+    cursor: pointer;
+  }
+  #input-panel button:hover { background: #33c; }
+
+  #message {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-family: 'Press Start 2P', monospace;
+    font-size: 16px;
+    color: #ff0;
+    text-align: center;
+    pointer-events: all;
+    text-shadow: 2px 2px 0 #000;
+    line-height: 2.2;
+  }
+  #message.hidden { display: none; }
+  #message button {
+    display: inline-block;
+    margin-top: 10px;
+    background: #22a;
+    border: 2px solid #44f;
+    color: #fff;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 12px;
+    padding: 8px 20px;
+    cursor: pointer;
+  }
+  #message button:hover { background: #33c; }
+
+  .turn-indicator {
+    color: #0f0;
+    font-size: 14px;
+    animation: blink 1s step-end infinite;
+  }
+
+  @keyframes blink {
+    50% { opacity: 0; }
+  }
+</style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas"></canvas>
+  <div id="ui-overlay">
+    <div id="scoreboard">
+      <span class="score-p1">P1: <span id="score1">0</span></span>
+      <span style="color:#aaa">G O R I L L A S</span>
+      <span class="score-p2">P2: <span id="score2">0</span></span>
+    </div>
+  </div>
+  <div id="input-panel" class="hidden">
+    <span id="turnLabel" class="turn-indicator">PLAYER 1 ▸</span>
+    <label>Angle:</label>
+    <input type="number" id="angleInput" min="0" max="90" value="45">
+    <label>Power:</label>
+    <input type="number" id="powerInput" min="1" max="200" value="50">
+    <button id="fireBtn">THROW!</button>
+  </div>
+  <div id="message" class="hidden"></div>
+</div>
+
+<script>
+// ============ GORILLAS - QBasic Classic Remake ============
+
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+
+// Responsive sizing
+const W = 800, H = 500;
+canvas.width = W;
+canvas.height = H;
+
+// Scale canvas to fit
+function resizeCanvas() {
+  const maxW = window.innerWidth - 20;
+  const maxH = window.innerHeight - 20;
+  const scale = Math.min(maxW / W, maxH / H, 1.5);
+  canvas.style.width = (W * scale) + 'px';
+  canvas.style.height = (H * scale) + 'px';
+  document.getElementById('gameContainer').style.width = (W * scale) + 'px';
+  document.getElementById('gameContainer').style.height = (H * scale) + 'px';
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
+
+// ---- Game State ----
+let buildings = [];
+let gorillas = [{ x: 0, y: 0 }, { x: 0, y: 0 }];
+let scores = [0, 0];
+let currentPlayer = 0;
+let banana = null;
+let explosions = [];
+let gamePhase = 'title'; // title, input, flight, explode, hit, roundOver
+let wind = 0;
+let sunState = 'normal'; // normal, surprised
+let sunTimer = 0;
+let particles = [];
+
+// Precomputed terrain as ImageData for pixel-perfect collision
+let terrainCanvas, terrainCtx;
+
+// ---- Colors (QBasic palette vibes) ----
+const SKY_COLOR = '#000050';
+const BUILDING_COLORS = ['#aa0000', '#00aa00', '#0000aa', '#aa5500', '#555555', '#00aaaa'];
+const WINDOW_LIT = '#ffff55';
+const WINDOW_DARK = '#333333';
+const GORILLA_COLOR = '#aa5500';
+const BANANA_COLOR = '#ffff00';
+const SUN_COLOR = '#ffff00';
+const SUN_FACE = '#000000';
+
+// ---- Building Generation ----
+function generateBuildings() {
+  buildings = [];
+  const minW = 40, maxW = 75;
+  let x = 0;
+  while (x < W + maxW) {
+    const bw = minW + Math.random() * (maxW - minW);
+    const bh = 80 + Math.random() * 220;
+    buildings.push({ x: Math.floor(x), w: Math.floor(bw), h: Math.floor(bh), color: BUILDING_COLORS[Math.floor(Math.random() * BUILDING_COLORS.length)] });
+    x += bw;
+  }
+}
+
+// ---- Place Gorillas ----
+function placeGorillas() {
+  // Player 1: on building ~20% from left
+  const bi1 = Math.floor(buildings.length * 0.15) + Math.floor(Math.random() * 2);
+  const b1 = buildings[Math.min(bi1, buildings.length - 1)];
+  gorillas[0] = { x: b1.x + b1.w / 2, y: H - b1.h - 30, w: 28, h: 30 };
+
+  // Player 2: on building ~80% from right
+  const bi2 = Math.floor(buildings.length * 0.8) + Math.floor(Math.random() * 2);
+  const b2 = buildings[Math.min(bi2, buildings.length - 1)];
+  gorillas[1] = { x: b2.x + b2.w / 2, y: H - b2.h - 30, w: 28, h: 30 };
+}
+
+// ---- Terrain Canvas (for destructible buildings) ----
+function initTerrain() {
+  terrainCanvas = document.createElement('canvas');
+  terrainCanvas.width = W;
+  terrainCanvas.height = H;
+  terrainCtx = terrainCanvas.getContext('2d');
+  drawBuildingsToTerrain();
+}
+
+function drawBuildingsToTerrain() {
+  terrainCtx.clearRect(0, 0, W, H);
+  for (const b of buildings) {
+    terrainCtx.fillStyle = b.color;
+    terrainCtx.fillRect(b.x, H - b.h, b.w, b.h);
+    // Windows
+    const wSize = 5, wGap = 8;
+    for (let wy = H - b.h + 12; wy < H - 10; wy += wGap + wSize) {
+      for (let wx = b.x + 6; wx < b.x + b.w - 8; wx += wGap + wSize) {
+        terrainCtx.fillStyle = Math.random() > 0.35 ? WINDOW_LIT : WINDOW_DARK;
+        terrainCtx.fillRect(wx, wy, wSize, wSize);
+      }
+    }
+  }
+}
+
+// ---- Drawing Functions ----
+function drawSky() {
+  // Gradient sky
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0, '#000020');
+  grad.addColorStop(0.5, '#000050');
+  grad.addColorStop(1, '#000080');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+
+  // Stars
+  const starSeed = 42;
+  for (let i = 0; i < 60; i++) {
+    const sx = ((i * 7919 + starSeed) % W);
+    const sy = ((i * 6271 + starSeed) % (H * 0.6));
+    const sb = 0.3 + ((i * 3571) % 70) / 100;
+    ctx.fillStyle = `rgba(255,255,255,${sb})`;
+    ctx.fillRect(sx, sy, 1 + (i % 2), 1 + (i % 2));
+  }
+}
+
+function drawSun() {
+  const sx = W / 2, sy = 42, sr = 22;
+  ctx.fillStyle = SUN_COLOR;
+  ctx.beginPath();
+  ctx.arc(sx, sy, sr, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Rays
+  ctx.strokeStyle = '#ffff00';
+  ctx.lineWidth = 2;
+  for (let a = 0; a < Math.PI * 2; a += Math.PI / 6) {
+    ctx.beginPath();
+    ctx.moveTo(sx + Math.cos(a) * (sr + 3), sy + Math.sin(a) * (sr + 3));
+    ctx.lineTo(sx + Math.cos(a) * (sr + 10), sy + Math.sin(a) * (sr + 10));
+    ctx.stroke();
+  }
+
+  // Face
+  ctx.fillStyle = SUN_FACE;
+  if (sunState === 'normal') {
+    // Eyes
+    ctx.fillRect(sx - 8, sy - 5, 4, 4);
+    ctx.fillRect(sx + 4, sy - 5, 4, 4);
+    // Smile
+    ctx.beginPath();
+    ctx.arc(sx, sy + 3, 8, 0.2, Math.PI - 0.2);
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = SUN_FACE;
+    ctx.stroke();
+  } else {
+    // Surprised - O face
+    ctx.fillRect(sx - 8, sy - 7, 5, 5);
+    ctx.fillRect(sx + 3, sy - 7, 5, 5);
+    ctx.beginPath();
+    ctx.arc(sx, sy + 5, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawGorilla(g, playerIdx, throwing = false) {
+  const cx = g.x, cy = g.y;
+  const s = 2; // pixel scale
+
+  ctx.fillStyle = GORILLA_COLOR;
+
+  // Body
+  ctx.fillRect(cx - 6*s, cy - 2*s, 12*s, 10*s);
+  // Head
+  ctx.fillRect(cx - 5*s, cy - 7*s, 10*s, 6*s);
+  // Legs
+  ctx.fillRect(cx - 5*s, cy + 8*s, 4*s, 4*s);
+  ctx.fillRect(cx + 1*s, cy + 8*s, 4*s, 4*s);
+
+  // Arms
+  if (throwing && playerIdx === currentPlayer) {
+    // One arm up throwing
+    if (playerIdx === 0) {
+      ctx.fillRect(cx - 8*s, cy - 6*s, 3*s, 5*s); // left arm down
+      ctx.fillRect(cx + 6*s, cy - 10*s, 3*s, 5*s); // right arm up
+    } else {
+      ctx.fillRect(cx - 8*s, cy - 10*s, 3*s, 5*s); // left arm up
+      ctx.fillRect(cx + 6*s, cy - 6*s, 3*s, 5*s); // right arm down
+    }
+  } else {
+    // Arms down
+    ctx.fillRect(cx - 8*s, cy - 2*s, 3*s, 8*s);
+    ctx.fillRect(cx + 6*s, cy - 2*s, 3*s, 8*s);
+  }
+
+  // Eyes
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(cx - 3*s, cy - 5*s, 2*s, 2*s);
+  ctx.fillRect(cx + 1*s, cy - 5*s, 2*s, 2*s);
+  ctx.fillStyle = '#000';
+  ctx.fillRect(cx - 2*s, cy - 5*s, 1*s, 1*s);
+  ctx.fillRect(cx + 2*s, cy - 5*s, 1*s, 1*s);
+
+  // Chest
+  ctx.fillStyle = '#cc8833';
+  ctx.fillRect(cx - 3*s, cy + 1*s, 6*s, 4*s);
+}
+
+function drawBanana(b) {
+  ctx.save();
+  ctx.translate(b.x, b.y);
+  ctx.rotate(b.rot);
+  ctx.fillStyle = BANANA_COLOR;
+  // Banana shape - curved rectangle
+  ctx.beginPath();
+  ctx.arc(0, 0, 5, 0, Math.PI, false);
+  ctx.lineTo(-5, 0);
+  ctx.lineTo(-3, -5);
+  ctx.lineTo(3, -5);
+  ctx.lineTo(5, 0);
+  ctx.fill();
+  ctx.restore();
+}
+
+function drawWind() {
+  const wx = W / 2, wy = H - 12;
+  ctx.fillStyle = '#aaaaff';
+  ctx.font = '14px VT323';
+  ctx.textAlign = 'center';
+  const windDir = wind > 0 ? '►' : wind < 0 ? '◄' : '•';
+  const windStr = Math.abs(wind).toFixed(1);
+  const arrows = windDir.repeat(Math.min(Math.ceil(Math.abs(wind) / 5), 5));
+  ctx.fillText(`Wind: ${arrows} ${windStr}`, wx, wy);
+}
+
+function drawExplosions() {
+  for (const e of explosions) {
+    const alpha = 1 - e.age / e.maxAge;
+    const r = e.radius * (0.5 + e.age / e.maxAge);
+    ctx.fillStyle = `rgba(255, ${Math.floor(200 * (1 - e.age/e.maxAge))}, 0, ${alpha})`;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+    ctx.fill();
+
+    ctx.fillStyle = `rgba(255, 255, 100, ${alpha * 0.5})`;
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function drawParticles() {
+  for (const p of particles) {
+    ctx.fillStyle = p.color;
+    ctx.globalAlpha = p.life;
+    ctx.fillRect(p.x, p.y, p.size, p.size);
+  }
+  ctx.globalAlpha = 1;
+}
+
+// ---- Game Logic ----
+function newRound() {
+  generateBuildings();
+  placeGorillas();
+  initTerrain();
+  wind = (Math.random() - 0.5) * 30;
+  banana = null;
+  explosions = [];
+  particles = [];
+  sunState = 'normal';
+  gamePhase = 'input';
+  showInputPanel();
+}
+
+function showInputPanel() {
+  const panel = document.getElementById('input-panel');
+  panel.classList.remove('hidden');
+  document.getElementById('turnLabel').textContent = `PLAYER ${currentPlayer + 1} ▸`;
+  document.getElementById('turnLabel').style.color = currentPlayer === 0 ? '#ff6' : '#f66';
+  document.getElementById('angleInput').value = currentPlayer === 0 ? '60' : '60';
+  document.getElementById('powerInput').value = '70';
+  document.getElementById('angleInput').focus();
+}
+
+function hideInputPanel() {
+  document.getElementById('input-panel').classList.add('hidden');
+}
+
+function showMessage(html) {
+  const msg = document.getElementById('message');
+  msg.innerHTML = html;
+  msg.classList.remove('hidden');
+}
+
+function hideMessage() {
+  document.getElementById('message').classList.add('hidden');
+}
+
+function fire(angle, power) {
+  hideInputPanel();
+  const g = gorillas[currentPlayer];
+  const dir = currentPlayer === 0 ? 1 : -1;
+  const rad = (angle * Math.PI) / 180;
+  const speed = power * 0.6;
+
+  banana = {
+    x: g.x + dir * 16,
+    y: g.y - 14,
+    vx: Math.cos(rad) * speed * dir,
+    vy: -Math.sin(rad) * speed,
+    rot: 0,
+    alive: true
+  };
+
+  sunState = 'normal';
+  gamePhase = 'flight';
+}
+
+function createExplosion(x, y, radius) {
+  explosions.push({ x, y, radius, age: 0, maxAge: 30 });
+
+  // Create debris particles
+  for (let i = 0; i < 25; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 1 + Math.random() * 4;
+    particles.push({
+      x, y,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 2,
+      size: 2 + Math.random() * 3,
+      color: ['#ff0', '#f80', '#f00', '#fff', '#aaa'][Math.floor(Math.random() * 5)],
+      life: 1,
+      decay: 0.015 + Math.random() * 0.02
+    });
+  }
+}
+
+function destroyTerrain(x, y, radius) {
+  terrainCtx.globalCompositeOperation = 'destination-out';
+  terrainCtx.beginPath();
+  terrainCtx.arc(x, y, radius, 0, Math.PI * 2);
+  terrainCtx.fill();
+  terrainCtx.globalCompositeOperation = 'source-over';
+}
+
+function checkCollision(x, y) {
+  // Out of bounds
+  if (x < 0 || x > W || y > H) return 'miss';
+  if (y < 0) return 'none';
+
+  // Hit gorilla?
+  for (let i = 0; i < 2; i++) {
+    const g = gorillas[i];
+    if (x > g.x - 14 && x < g.x + 14 && y > g.y - 14 && y < g.y + 24) {
+      return i === currentPlayer ? 'self' : 'hit';
+    }
+  }
+
+  // Hit building (terrain)?
+  if (y >= 0 && y < H && x >= 0 && x < W) {
+    const pixel = terrainCtx.getImageData(Math.floor(x), Math.floor(y), 1, 1).data;
+    if (pixel[3] > 0) return 'building';
+  }
+
+  // Check sun
+  const sdx = x - W/2, sdy = y - 42;
+  if (Math.sqrt(sdx*sdx + sdy*sdy) < 22) {
+    sunState = 'surprised';
+    sunTimer = 60;
+  }
+
+  return 'none';
+}
+
+function updateBanana(dt) {
+  if (!banana || !banana.alive) return;
+
+  const gravity = 9.8 * 1.5;
+  const windForce = wind * 0.08;
+
+  banana.vx += windForce * dt;
+  banana.vy += gravity * dt;
+  banana.x += banana.vx * dt;
+  banana.y += banana.vy * dt;
+  banana.rot += 0.15;
+
+  const collision = checkCollision(banana.x, banana.y);
+
+  if (collision === 'hit') {
+    const targetIdx = 1 - currentPlayer;
+    scores[currentPlayer]++;
+    document.getElementById('score1').textContent = scores[0];
+    document.getElementById('score2').textContent = scores[1];
+    createExplosion(banana.x, banana.y, 35);
+    destroyTerrain(banana.x, banana.y, 35);
+    banana.alive = false;
+    gamePhase = 'hit';
+    sunState = 'surprised';
+
+    setTimeout(() => {
+      showMessage(
+        `<span style="color:${currentPlayer === 0 ? '#ff6' : '#f66'}">PLAYER ${currentPlayer + 1} WINS THE ROUND!</span><br>` +
+        `Score: ${scores[0]} - ${scores[1]}<br><button onclick="nextRound()">NEXT ROUND</button>`
+      );
+      gamePhase = 'roundOver';
+    }, 1000);
+  } else if (collision === 'self') {
+    scores[1 - currentPlayer]++;
+    document.getElementById('score1').textContent = scores[0];
+    document.getElementById('score2').textContent = scores[1];
+    createExplosion(banana.x, banana.y, 35);
+    destroyTerrain(banana.x, banana.y, 35);
+    banana.alive = false;
+    gamePhase = 'hit';
+    sunState = 'surprised';
+
+    setTimeout(() => {
+      showMessage(
+        `<span style="color:#f00">PLAYER ${currentPlayer + 1} HIT THEMSELVES!</span><br>` +
+        `Score: ${scores[0]} - ${scores[1]}<br><button onclick="nextRound()">NEXT ROUND</button>`
+      );
+      gamePhase = 'roundOver';
+    }, 1000);
+  } else if (collision === 'building') {
+    createExplosion(banana.x, banana.y, 22);
+    destroyTerrain(banana.x, banana.y, 22);
+    banana.alive = false;
+    sunState = 'surprised';
+    sunTimer = 40;
+    gamePhase = 'explode';
+
+    setTimeout(() => {
+      currentPlayer = 1 - currentPlayer;
+      gamePhase = 'input';
+      showInputPanel();
+    }, 800);
+  } else if (collision === 'miss') {
+    banana.alive = false;
+    gamePhase = 'explode';
+
+    setTimeout(() => {
+      currentPlayer = 1 - currentPlayer;
+      gamePhase = 'input';
+      showInputPanel();
+    }, 400);
+  }
+}
+
+function updateExplosions() {
+  for (let i = explosions.length - 1; i >= 0; i--) {
+    explosions[i].age++;
+    if (explosions[i].age >= explosions[i].maxAge) {
+      explosions.splice(i, 1);
+    }
+  }
+}
+
+function updateParticles() {
+  for (let i = particles.length - 1; i >= 0; i--) {
+    const p = particles[i];
+    p.x += p.vx;
+    p.y += p.vy;
+    p.vy += 0.15;
+    p.life -= p.decay;
+    if (p.life <= 0) particles.splice(i, 1);
+  }
+}
+
+function updateSun() {
+  if (sunTimer > 0) {
+    sunTimer--;
+    if (sunTimer <= 0) sunState = 'normal';
+  }
+}
+
+// ---- Main Loop ----
+let lastTime = 0;
+
+function gameLoop(timestamp) {
+  const dt = Math.min((timestamp - lastTime) / 1000, 0.05);
+  lastTime = timestamp;
+
+  // Update
+  if (gamePhase === 'flight') {
+    updateBanana(dt);
+  }
+  updateExplosions();
+  updateParticles();
+  updateSun();
+
+  // Draw
+  drawSky();
+  drawSun();
+  drawWind();
+
+  // Draw terrain (buildings)
+  ctx.drawImage(terrainCanvas, 0, 0);
+
+  // Draw gorillas (hide the one that got hit)
+  const throwing = gamePhase === 'flight';
+  if (gamePhase !== 'hit' && gamePhase !== 'roundOver') {
+    drawGorilla(gorillas[0], 0, throwing);
+    drawGorilla(gorillas[1], 1, throwing);
+  } else {
+    // Draw only the winner
+    const winner = currentPlayer;
+    const loser = 1 - currentPlayer;
+    drawGorilla(gorillas[winner], winner, false);
+    // Don't draw loser (they got hit!)
+  }
+
+  // Draw banana
+  if (banana && banana.alive) {
+    drawBanana(banana);
+  }
+
+  drawExplosions();
+  drawParticles();
+
+  requestAnimationFrame(gameLoop);
+}
+
+// ---- Event Handlers ----
+document.getElementById('fireBtn').addEventListener('click', () => {
+  if (gamePhase !== 'input') return;
+  const angle = parseFloat(document.getElementById('angleInput').value) || 45;
+  const power = parseFloat(document.getElementById('powerInput').value) || 50;
+  fire(Math.max(0, Math.min(90, angle)), Math.max(1, Math.min(200, power)));
+});
+
+// Enter key fires
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter' && gamePhase === 'input') {
+    document.getElementById('fireBtn').click();
+  }
+});
+
+function nextRound() {
+  hideMessage();
+  newRound();
+}
+
+// ---- Title Screen ----
+function showTitle() {
+  gamePhase = 'title';
+  generateBuildings();
+  placeGorillas();
+  initTerrain();
+  wind = (Math.random() - 0.5) * 30;
+
+  showMessage(
+    `<span style="font-size:28px;color:#ff0">G O R I L L A S</span><br>` +
+    `<span style="font-size:10px;color:#aaf">QBasic Classic Remake</span><br><br>` +
+    `<span style="font-size:10px;color:#8a8">Players take turns throwing<br>exploding bananas!<br><br>` +
+    `Set ANGLE (0-90) and POWER (1-200)</span><br>` +
+    `<button onclick="startGame()">START GAME</button>`
+  );
+}
+
+function startGame() {
+  hideMessage();
+  scores = [0, 0];
+  currentPlayer = 0;
+  document.getElementById('score1').textContent = '0';
+  document.getElementById('score2').textContent = '0';
+  newRound();
+}
+
+// Init
+showTitle();
+requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>
