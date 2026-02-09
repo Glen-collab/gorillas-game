@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>STAR TREK - DEFEND EARTH</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        .hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 16px;
+            pointer-events: none;
+            z-index: 50;
+            font-size: 10px;
+            color: #8cf;
+            text-shadow: 0 0 6px rgba(100, 180, 255, 0.4);
+        }
+
+        .hud-item span {
+            font-weight: bold;
+        }
+
+        .lives-display {
+            display: flex;
+            gap: 6px;
+            font-size: 12px;
+        }
+
+        .hit-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 255, 80, 0.2);
+            z-index: 90;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.05s;
+        }
+
+        .hit-flash.active {
+            opacity: 1;
+        }
+
+        .hit-flash-gold {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(255, 180, 50, 0.15);
+            z-index: 90;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.05s;
+        }
+
+        .hit-flash-gold.active {
+            opacity: 1;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 80;
+            pointer-events: auto;
+            cursor: pointer;
+        }
+
+        .overlay-text {
+            color: #8cf;
+            text-align: center;
+            text-shadow: 0 0 10px rgba(100, 180, 255, 0.5);
+        }
+
+        .overlay-text .big {
+            font-size: 18px;
+            display: block;
+            margin-bottom: 16px;
+            letter-spacing: 3px;
+            color: #8cf;
+        }
+
+        .overlay-text .med {
+            font-size: 10px;
+            display: block;
+            margin-bottom: 8px;
+            color: #fc6;
+        }
+
+        .overlay-text .small {
+            font-size: 8px;
+            display: block;
+            opacity: 0.7;
+            color: #8cf;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            49% {
+                opacity: 0.7;
+            }
+
+            50%,
+            100% {
+                opacity: 0;
+            }
+        }
+
+        @media (min-width: 600px) {
+            .hud {
+                padding: 16px 24px;
+                font-size: 12px;
+            }
+
+            .overlay-text .big {
+                font-size: 26px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+
+    <canvas id="c"></canvas>
+
+    <div class="hud">
+        <div class="hud-item">SCR <span id="hudScore">00000</span></div>
+        <div class="hud-item">WAVE <span id="hudWave">1/9</span></div>
+        <div class="hud-item lives-display" id="hudLives"></div>
+    </div>
+
+    <div class="hit-flash" id="hitFlash"></div>
+    <div class="hit-flash-gold" id="hitFlashGold"></div>
+
+    <div class="overlay" id="startOverlay">
+        <div class="overlay-text">
+            <span class="big">★ DEFEND EARTH ★</span>
+            <span class="med">KLINGONS APPROACHING — YOU ARE THE LAST LINE</span>
+            <span class="small">TAP SCREEN OR PRESS ENTER</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="gameOverOverlay" style="display:none;">
+        <div class="overlay-text">
+            <span class="big">EARTH HAS FALLEN</span>
+            <span class="med" id="finalScore"></span>
+            <span class="small">TAP OR PRESS ENTER</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="winOverlay" style="display:none;"></div>
+
+    <script>
+        // ===== AUDIO =====
+        class SFX {
+            constructor() { this.ctx = null; this.on = true; }
+            init() {
+                if (this.ctx) return;
+                try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+            }
+            play(type) {
+                if (!this.ctx || !this.on) return;
+                const t = this.ctx.currentTime;
+                const osc = () => this.ctx.createOscillator();
+                const gn = () => this.ctx.createGain();
+
+                if (type === 'shoot') {
+                    // Phaser beam sound
+                    [0, 0.05].forEach(delay => {
+                        const o = osc(), g = gn();
+                        o.connect(g); g.connect(this.ctx.destination);
+                        o.type = 'sine';
+                        o.frequency.setValueAtTime(800, t + delay);
+                        o.frequency.exponentialRampToValueAtTime(1400, t + delay + 0.04);
+                        o.frequency.exponentialRampToValueAtTime(600, t + delay + 0.1);
+                        g.gain.setValueAtTime(0.07, t + delay);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.1);
+                        o.start(t + delay); o.stop(t + delay + 0.1);
+                    });
+                }
+                if (type === 'photon') {
+                    // Photon torpedo
+                    const o = osc(), g = gn();
+                    o.connect(g); g.connect(this.ctx.destination);
+                    o.type = 'sine';
+                    o.frequency.setValueAtTime(300, t);
+                    o.frequency.exponentialRampToValueAtTime(100, t + 0.3);
+                    g.gain.setValueAtTime(0.1, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+                    o.start(t); o.stop(t + 0.3);
+                }
+                if (type === 'hit') {
+                    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.45, this.ctx.sampleRate);
+                    const d = buf.getChannelData(0);
+                    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.1);
+                    const src = this.ctx.createBufferSource(), g = gn();
+                    src.buffer = buf; src.connect(g); g.connect(this.ctx.destination);
+                    g.gain.setValueAtTime(0.18, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.45);
+                    src.start(t);
+                    const o = osc(), g2 = gn();
+                    o.type = 'sine'; o.connect(g2); g2.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(90, t);
+                    o.frequency.exponentialRampToValueAtTime(25, t + 0.35);
+                    g2.gain.setValueAtTime(0.12, t);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+                    o.start(t); o.stop(t + 0.35);
+                }
+                if (type === 'damage') {
+                    const o = osc(), g = gn();
+                    o.type = 'sawtooth'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(200, t);
+                    o.frequency.exponentialRampToValueAtTime(50, t + 0.4);
+                    g.gain.setValueAtTime(0.12, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.4);
+                    o.start(t); o.stop(t + 0.4);
+                }
+                if (type === 'gameover') {
+                    [200, 170, 140, 100, 70].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sawtooth'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.25);
+                        g.gain.setValueAtTime(0.08, t + i * 0.25);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.25 + 0.24);
+                        o.start(t + i * 0.25); o.stop(t + i * 0.25 + 0.25);
+                    });
+                }
+                if (type === 'countdown') {
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(600, t);
+                    g.gain.setValueAtTime(0.06, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                    o.start(t); o.stop(t + 0.1);
+                }
+                if (type === 'go') {
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(1000, t);
+                    g.gain.setValueAtTime(0.08, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    o.start(t); o.stop(t + 0.15);
+                }
+                if (type === 'victory') {
+                    const notes = [392, 494, 587, 784, 587, 784, 988];
+                    notes.forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.2);
+                        g.gain.setValueAtTime(0.08, t + i * 0.2);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.2 + 0.19);
+                        o.start(t + i * 0.2); o.stop(t + i * 0.2 + 0.2);
+                    });
+                }
+                if (type === 'decloak') {
+                    const o = osc(), g = gn();
+                    o.type = 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(150, t);
+                    o.frequency.exponentialRampToValueAtTime(600, t + 0.2);
+                    g.gain.setValueAtTime(0.04, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+                    o.start(t); o.stop(t + 0.2);
+                }
+            }
+        }
+
+        // ===== GAME STATE =====
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const sfx = new SFX();
+        const MAX_WAVES = 9;
+
+        let W, H;
+        let state = 'start';
+        let score = 0, lives = 3, wave = 1;
+        let enemies = [], explosions = [], playerBolts = [], enemyBolts = [], particles = [];
+        let crossX = 0.5, crossY = 0.4;
+        let keys = {};
+        let spawnTimer = 0, spawnInterval = 1200;
+        let killed = 0, waveTarget = 7;
+        let enemySpeed = 0.3;
+        let maxOnScreen = 4;
+        let lastTime = 0;
+        let playerAngle = 0;
+
+        let stars = [];
+        let starSpeed = 0.5;
+        let earthSize = 0;
+
+        // Countdown
+        let countdownPhase = 0, countdownTimer = 0;
+        const CD_DUR = [1200, 900, 700, 700, 700, 500];
+        const CD_TEXT = ['', 'RED ALERT', '3', '2', '1', 'ENGAGE!'];
+
+        let victoryTimer = 0;
+
+        // Spawn slots
+        const SLOTS = [];
+        for (let row = 0; row < 5; row++) {
+            const y = 0.14 + row * 0.11;
+            const cols = row % 2 === 0 ? 4 : 3;
+            for (let col = 0; col < cols; col++) {
+                const x = row % 2 === 0
+                    ? 0.22 + col * 0.187
+                    : 0.30 + col * 0.20;
+                SLOTS.push({ x, y });
+            }
+        }
+
+        function initStars() {
+            stars = [];
+            for (let i = 0; i < 200; i++) {
+                stars.push({ x: Math.random(), y: Math.random(), z: Math.random(), size: 0.5 + Math.random() * 2 });
+            }
+        }
+
+        function resize() {
+            W = canvas.width = window.innerWidth * 2;
+            H = canvas.height = window.innerHeight * 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        initStars();
+
+        // ===== DRAWING =====
+
+        function drawStars(dt) {
+            const speed = (state === 'playing' ? starSpeed : 0.15);
+            stars.forEach(s => {
+                s.y += speed * s.z * dt;
+                if (s.y > 1.05) { s.y = -0.02; s.x = Math.random(); s.z = Math.random(); }
+                const brightness = 0.3 + s.z * 0.7;
+                const flicker = 0.8 + Math.sin(Date.now() * 0.01 * s.z + s.x * 100) * 0.2;
+                const sz = s.size * (0.5 + s.z * 0.5);
+                ctx.fillStyle = `rgba(200,220,255,${brightness * flicker})`;
+                ctx.beginPath();
+                ctx.arc(s.x * W, s.y * H, sz, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawEarth() {
+            if (earthSize <= 0) return;
+            const cx = W * 0.5;
+            const cy = H + earthSize * 0.15;
+            const r = earthSize;
+
+            // Ocean
+            const oceanGrad = ctx.createRadialGradient(cx - r * 0.2, cy - r * 0.3, r * 0.1, cx, cy, r);
+            oceanGrad.addColorStop(0, '#2855a8');
+            oceanGrad.addColorStop(0.5, '#1a3d7a');
+            oceanGrad.addColorStop(1, '#0a1a3a');
+            ctx.fillStyle = oceanGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Continents (random-ish landmasses)
+            ctx.fillStyle = 'rgba(40,120,50,0.5)';
+            const continents = [
+                { x: -0.15, y: -0.25, rx: 0.2, ry: 0.15 },
+                { x: 0.1, y: -0.1, rx: 0.12, ry: 0.18 },
+                { x: -0.25, y: 0.05, rx: 0.1, ry: 0.08 },
+                { x: 0.2, y: -0.35, rx: 0.08, ry: 0.12 },
+                { x: -0.05, y: -0.4, rx: 0.15, ry: 0.06 },
+                { x: 0.25, y: 0.1, rx: 0.06, ry: 0.1 },
+            ];
+            continents.forEach(c => {
+                ctx.beginPath();
+                ctx.ellipse(cx + c.x * r, cy + c.y * r, c.rx * r, c.ry * r, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Cloud swirls
+            ctx.fillStyle = 'rgba(200,220,255,0.12)';
+            for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2 + Date.now() * 0.00003;
+                const cr = r * (0.3 + (i % 3) * 0.15);
+                ctx.beginPath();
+                ctx.ellipse(cx + Math.cos(a) * cr, cy + Math.sin(a) * cr * 0.5,
+                    r * 0.12, r * 0.03, a, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Atmosphere glow
+            ctx.strokeStyle = 'rgba(100,180,255,0.25)';
+            ctx.lineWidth = r * 0.04;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r + r * 0.02, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Specular highlight
+            const specGrad = ctx.createRadialGradient(cx - r * 0.3, cy - r * 0.4, 0, cx - r * 0.3, cy - r * 0.4, r * 0.6);
+            specGrad.addColorStop(0, 'rgba(200,230,255,0.15)');
+            specGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = specGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Danger warning on late waves
+            if (wave >= 7) {
+                const pulseAlpha = (0.1 + Math.sin(Date.now() * 0.005) * 0.05) * (wave - 6);
+                ctx.strokeStyle = `rgba(255,80,80,${Math.min(pulseAlpha, 0.3)})`;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cx, cy, r + r * 0.06, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function drawEnterprise(cx, cy, size, angle) {
+            const x = cx * W, y = cy * H;
+            const s = size * Math.min(W, H);
+
+            ctx.save();
+            ctx.translate(x, y);
+            if (angle) ctx.rotate(angle);
+
+            // === Warp nacelles (two long tubes on pylons) ===
+
+            // Nacelle pylons
+            ctx.strokeStyle = '#889';
+            ctx.lineWidth = 2;
+            // Left pylon
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.06, s * 0.12);
+            ctx.lineTo(-s * 0.28, s * 0.22);
+            ctx.stroke();
+            // Right pylon
+            ctx.beginPath();
+            ctx.moveTo(s * 0.06, s * 0.12);
+            ctx.lineTo(s * 0.28, s * 0.22);
+            ctx.stroke();
+
+            // Left nacelle body
+            ctx.fillStyle = '#667';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.25, s * 0.1);
+            ctx.lineTo(-s * 0.23, s * 0.08);
+            ctx.lineTo(-s * 0.23, s * 0.32);
+            ctx.lineTo(-s * 0.25, s * 0.34);
+            ctx.lineTo(-s * 0.32, s * 0.34);
+            ctx.lineTo(-s * 0.34, s * 0.32);
+            ctx.lineTo(-s * 0.34, s * 0.08);
+            ctx.lineTo(-s * 0.32, s * 0.06);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#99a';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Right nacelle body
+            ctx.fillStyle = '#667';
+            ctx.beginPath();
+            ctx.moveTo(s * 0.25, s * 0.1);
+            ctx.lineTo(s * 0.23, s * 0.08);
+            ctx.lineTo(s * 0.23, s * 0.32);
+            ctx.lineTo(s * 0.25, s * 0.34);
+            ctx.lineTo(s * 0.32, s * 0.34);
+            ctx.lineTo(s * 0.34, s * 0.32);
+            ctx.lineTo(s * 0.34, s * 0.08);
+            ctx.lineTo(s * 0.32, s * 0.06);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#99a';
+            ctx.stroke();
+
+            // Nacelle Bussard collectors (red domes at front)
+            ctx.fillStyle = '#c44';
+            ctx.beginPath();
+            ctx.arc(-s * 0.285, s * 0.08, s * 0.05, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f66';
+            ctx.beginPath();
+            ctx.arc(-s * 0.285, s * 0.075, s * 0.025, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = '#c44';
+            ctx.beginPath();
+            ctx.arc(s * 0.285, s * 0.08, s * 0.05, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#f66';
+            ctx.beginPath();
+            ctx.arc(s * 0.285, s * 0.075, s * 0.025, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Warp glow strips (blue line along each nacelle)
+            ctx.strokeStyle = 'rgba(100,180,255,0.8)';
+            ctx.shadowColor = '#4af';
+            ctx.shadowBlur = 6;
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.285, s * 0.12);
+            ctx.lineTo(-s * 0.285, s * 0.30);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(s * 0.285, s * 0.12);
+            ctx.lineTo(s * 0.285, s * 0.30);
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // === Engineering hull (secondary hull) ===
+            ctx.fillStyle = '#889';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.045, -s * 0.05);
+            ctx.lineTo(s * 0.045, -s * 0.05);
+            ctx.lineTo(s * 0.05, s * 0.28);
+            ctx.lineTo(s * 0.035, s * 0.34);
+            ctx.lineTo(-s * 0.035, s * 0.34);
+            ctx.lineTo(-s * 0.05, s * 0.28);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#aab';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Deflector dish (blue glow at bottom of engineering hull)
+            ctx.fillStyle = '#48c';
+            ctx.beginPath();
+            ctx.arc(0, s * 0.33, s * 0.025, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowColor = '#4af';
+            ctx.shadowBlur = 6;
+            ctx.fillStyle = 'rgba(80,160,255,0.6)';
+            ctx.beginPath();
+            ctx.arc(0, s * 0.33, s * 0.04, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // === Neck (connecting dorsal) ===
+            ctx.fillStyle = '#99a';
+            ctx.fillRect(-s * 0.025, -s * 0.22, s * 0.05, s * 0.2);
+
+            // === Saucer section ===
+            // Shadow/depth underneath
+            ctx.fillStyle = '#556';
+            ctx.beginPath();
+            ctx.ellipse(s * 0.01, -s * 0.30 + s * 0.015, s * 0.2, s * 0.07, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main saucer
+            ctx.fillStyle = '#99a';
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.30, s * 0.2, s * 0.07, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#bbc';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Saucer detail rings
+            ctx.strokeStyle = 'rgba(180,190,200,0.4)';
+            ctx.lineWidth = 0.5;
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.30, s * 0.14, s * 0.05, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.30, s * 0.08, s * 0.03, 0, 0, Math.PI * 2);
+            ctx.stroke();
+
+            // Bridge dome
+            ctx.fillStyle = '#aab';
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.31, s * 0.04, s * 0.015, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#ccd';
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.315, s * 0.02, s * 0.008, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Phaser strips (subtle gold lines on saucer edge)
+            ctx.strokeStyle = 'rgba(255,200,100,0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.30, s * 0.19, s * 0.065, 0, -0.3, 0.3);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.30, s * 0.19, s * 0.065, 0, Math.PI - 0.3, Math.PI + 0.3);
+            ctx.stroke();
+
+            // Engine exhaust glow (behind nacelles)
+            [-s * 0.285, s * 0.285].forEach(ex => {
+                ctx.fillStyle = 'rgba(100,180,255,0.8)';
+                ctx.beginPath();
+                ctx.ellipse(ex, s * 0.35, s * 0.02, s * 0.03, 0, 0, Math.PI * 2);
+                ctx.fill();
+                const eglow = ctx.createRadialGradient(ex, s * 0.36, 0, ex, s * 0.36, s * 0.08);
+                eglow.addColorStop(0, 'rgba(100,180,255,0.4)');
+                eglow.addColorStop(1, 'transparent');
+                ctx.fillStyle = eglow;
+                ctx.beginPath();
+                ctx.arc(ex, s * 0.36, s * 0.08, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
+        function drawBirdOfPrey(cx, cy, size, flash) {
+            const x = cx * W, y = cy * H;
+            const s = size * Math.min(W, H);
+
+            // === Wings (aggressive forward-swept) ===
+            ctx.fillStyle = flash ? 'rgba(100,255,100,0.2)' : '#3a4a3a';
+            ctx.strokeStyle = flash ? '#8f8' : '#5a6a5a';
+            ctx.lineWidth = 1.5;
+
+            // Left wing
+            ctx.beginPath();
+            ctx.moveTo(x - s * 0.08, y - s * 0.02);
+            ctx.lineTo(x - s * 0.4, y - s * 0.3);
+            ctx.lineTo(x - s * 0.42, y - s * 0.25);
+            ctx.lineTo(x - s * 0.38, y - s * 0.2);
+            ctx.lineTo(x - s * 0.1, y + s * 0.05);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // Right wing
+            ctx.beginPath();
+            ctx.moveTo(x + s * 0.08, y - s * 0.02);
+            ctx.lineTo(x + s * 0.4, y - s * 0.3);
+            ctx.lineTo(x + s * 0.42, y - s * 0.25);
+            ctx.lineTo(x + s * 0.38, y - s * 0.2);
+            ctx.lineTo(x + s * 0.1, y + s * 0.05);
+            ctx.closePath();
+            ctx.fill(); ctx.stroke();
+
+            // Wing disruptor tips (green glow)
+            ctx.fillStyle = flash ? '#ff8' : '#4a4';
+            ctx.shadowColor = '#0f0';
+            ctx.shadowBlur = flash ? 8 : 3;
+            ctx.beginPath();
+            ctx.arc(x - s * 0.41, y - s * 0.27, s * 0.025, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(x + s * 0.41, y - s * 0.27, s * 0.025, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // === Main body/neck ===
+            ctx.fillStyle = flash ? '#6a7a6a' : '#4a5a4a';
+            ctx.beginPath();
+            ctx.moveTo(x, y - s * 0.15);
+            ctx.lineTo(x + s * 0.06, y);
+            ctx.lineTo(x + s * 0.05, y + s * 0.2);
+            ctx.lineTo(x - s * 0.05, y + s * 0.2);
+            ctx.lineTo(x - s * 0.06, y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = flash ? '#8f8' : '#6a7a6a';
+            ctx.stroke();
+
+            // === Head/cockpit ===
+            ctx.fillStyle = flash ? '#7a8a7a' : '#5a6a5a';
+            ctx.beginPath();
+            ctx.moveTo(x, y - s * 0.35);
+            ctx.lineTo(x + s * 0.06, y - s * 0.15);
+            ctx.lineTo(x + s * 0.04, y - s * 0.08);
+            ctx.lineTo(x - s * 0.04, y - s * 0.08);
+            ctx.lineTo(x - s * 0.06, y - s * 0.15);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+
+            // Cockpit window
+            ctx.fillStyle = flash ? '#bfb' : '#2a3a2a';
+            ctx.beginPath();
+            ctx.ellipse(x, y - s * 0.2, s * 0.025, s * 0.04, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Engine glow (greenish)
+            ctx.fillStyle = 'rgba(80,200,80,0.7)';
+            ctx.beginPath();
+            ctx.ellipse(x, y + s * 0.22, s * 0.025, s * 0.03, 0, 0, Math.PI * 2);
+            ctx.fill();
+            const eglow = ctx.createRadialGradient(x, y + s * 0.22, 0, x, y + s * 0.22, s * 0.06);
+            eglow.addColorStop(0, 'rgba(80,200,80,0.3)');
+            eglow.addColorStop(1, 'transparent');
+            ctx.fillStyle = eglow;
+            ctx.beginPath();
+            ctx.arc(x, y + s * 0.22, s * 0.06, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawPhaserBolt(b) {
+            const x = b.x * W, y = b.y * H;
+            const angle = Math.atan2(b.vy, b.vx);
+            // Glow
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, 10);
+            grad.addColorStop(0, 'rgba(255,180,50,0.7)');
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, 10, 0, Math.PI * 2);
+            ctx.fill();
+            // Core
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle - Math.PI / 2);
+            ctx.fillStyle = '#fc8';
+            ctx.shadowColor = '#fa0';
+            ctx.shadowBlur = 8;
+            ctx.fillRect(-2, -10, 4, 20);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        function drawDisruptorBolt(b) {
+            const x = b.x * W, y = b.y * H;
+            const angle = Math.atan2(b.vy, b.vx);
+            const grad = ctx.createRadialGradient(x, y, 0, x, y, 8);
+            grad.addColorStop(0, 'rgba(80,255,80,0.6)');
+            grad.addColorStop(1, 'transparent');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(x, y, 8, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle - Math.PI / 2);
+            ctx.fillStyle = '#4f4';
+            ctx.shadowColor = '#0f0';
+            ctx.shadowBlur = 6;
+            ctx.fillRect(-1.5, -8, 3, 16);
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        function drawExplosion(ex) {
+            const x = ex.x * W, y = ex.y * H;
+            const p = ex.progress;
+            const r = (30 + p * 80) * (Math.min(W, H) / 600);
+
+            for (let ring = 0; ring < 3; ring++) {
+                const rp = Math.min(1, p + ring * 0.08);
+                const ringR = r * (0.6 + ring * 0.3) * rp;
+                const alpha = Math.max(0, (1 - rp * 1.3) * 0.7);
+                const colors = ['rgba(100,255,100,', 'rgba(255,220,80,', 'rgba(255,130,30,'];
+                ctx.strokeStyle = colors[ring] + alpha + ')';
+                ctx.lineWidth = 3 - ring;
+                ctx.beginPath();
+                ctx.arc(x, y, ringR, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            for (let i = 0; i < 12; i++) {
+                const a = (i / 12) * Math.PI * 2 + p * 5;
+                const ri = r * 0.05;
+                const ro = r * (0.3 + p * 0.7);
+                const alpha = Math.max(0, 1 - p * 1.5);
+                ctx.strokeStyle = i % 3 === 0
+                    ? `rgba(150,255,150,${alpha})`
+                    : i % 3 === 1
+                        ? `rgba(255,220,80,${alpha})`
+                        : `rgba(255,150,50,${alpha})`;
+                ctx.lineWidth = 2.5 - p * 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x + Math.cos(a) * ri, y + Math.sin(a) * ri);
+                ctx.lineTo(x + Math.cos(a) * ro, y + Math.sin(a) * ro);
+                ctx.stroke();
+            }
+
+            if (p < 0.35) {
+                const fa = 1 - p / 0.35;
+                const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 0.4 * (1 - p));
+                glow.addColorStop(0, `rgba(200,255,200,${fa})`);
+                glow.addColorStop(0.3, `rgba(100,255,100,${fa * 0.8})`);
+                glow.addColorStop(0.7, `rgba(255,200,50,${fa * 0.4})`);
+                glow.addColorStop(1, 'transparent');
+                ctx.fillStyle = glow;
+                ctx.beginPath();
+                ctx.arc(x, y, r * 0.4 * (1 - p), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (p < 0.6) {
+                const ga = (0.6 - p) * 0.4;
+                const ambGlow = ctx.createRadialGradient(x, y, 0, x, y, r * 1.2);
+                ambGlow.addColorStop(0, `rgba(100,255,100,${ga})`);
+                ambGlow.addColorStop(1, 'transparent');
+                ctx.fillStyle = ambGlow;
+                ctx.beginPath();
+                ctx.arc(x, y, r * 1.2, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawCrosshair() {
+            const x = crossX * W, y = crossY * H;
+            const r = 18 * (Math.min(W, H) / 600);
+            const ext = 8 * (Math.min(W, H) / 600);
+
+            ctx.strokeStyle = 'rgba(255,180,80,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.stroke();
+
+            ctx.beginPath();
+            ctx.moveTo(x - r - ext, y); ctx.lineTo(x - r + 4, y);
+            ctx.moveTo(x + r - 4, y); ctx.lineTo(x + r + ext, y);
+            ctx.moveTo(x, y - r - ext); ctx.lineTo(x, y - r + 4);
+            ctx.moveTo(x, y + r - 4); ctx.lineTo(x, y + r + ext);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,180,80,0.8)';
+            ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+        }
+
+        function drawParticle(p) {
+            ctx.fillStyle = `rgba(${p.r2 || 100},${p.g2 || 255},${p.b2 || 100},${p.alpha})`;
+            ctx.beginPath();
+            ctx.arc(p.x * W, p.y * H, p.rad * Math.min(W, H), 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // ===== COUNTDOWN =====
+        function drawCountdown() {
+            const cx = W / 2, cy = H / 2;
+
+            ctx.fillStyle = '#8cf';
+            ctx.font = `${Math.min(W, H) * 0.025}px 'Press Start 2P'`;
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(100,180,255,0.4)';
+            ctx.shadowBlur = 10;
+            ctx.fillText('WAVE ' + wave + ' OF ' + MAX_WAVES, cx, cy - Math.min(W, H) * 0.08);
+
+            const text = CD_TEXT[countdownPhase];
+            if (text) {
+                const isNum = ['3', '2', '1'].includes(text);
+                const isGo = text === 'ENGAGE!';
+                const fontSize = isNum ? 0.1 : (isGo ? 0.05 : 0.025);
+                const phase = countdownTimer / CD_DUR[countdownPhase];
+                const scale = isNum ? 1 + Math.sin(phase * Math.PI) * 0.15 : 1;
+                const alpha = isGo ? Math.max(0, 1 - phase * 2) : 1;
+
+                ctx.save();
+                ctx.translate(cx, cy + Math.min(W, H) * 0.02);
+                ctx.scale(scale, scale);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = isGo ? '#fc6' : (text === 'RED ALERT' ? '#f44' : '#fc6');
+                ctx.font = `${Math.min(W, H) * fontSize}px 'Press Start 2P'`;
+                ctx.fillText(text, 0, 0);
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // ===== VICTORY =====
+        function drawVictory(dt) {
+            victoryTimer += dt;
+            const cx = W / 2, cy = H * 0.4;
+            const t = victoryTimer;
+            const baseR = Math.min(W, H) * 0.18;
+
+            // Earth safe and glowing
+            const er = baseR * Math.min(1, t * 0.5);
+
+            const oceanGrad = ctx.createRadialGradient(cx - er * 0.2, cy - er * 0.3, er * 0.1, cx, cy, er);
+            oceanGrad.addColorStop(0, '#3870c8');
+            oceanGrad.addColorStop(0.5, '#2050a0');
+            oceanGrad.addColorStop(1, '#102050');
+            ctx.fillStyle = oceanGrad;
+            ctx.beginPath();
+            ctx.arc(cx, cy, er, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = 'rgba(50,150,60,0.5)';
+            [[-0.15, -0.25, 0.2, 0.15], [0.1, -0.1, 0.12, 0.18], [-0.25, 0.05, 0.1, 0.08], [0.2, -0.35, 0.08, 0.12]].forEach(([ox, oy, rx, ry]) => {
+                ctx.beginPath();
+                ctx.ellipse(cx + ox * er, cy + oy * er, rx * er, ry * er, 0.3, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Blue peace aura
+            if (t > 1) {
+                const aAlpha = Math.min(0.3, (t - 1) * 0.1);
+                const aGlow = ctx.createRadialGradient(cx, cy, er, cx, cy, er * 1.4);
+                aGlow.addColorStop(0, `rgba(100,180,255,${aAlpha})`);
+                aGlow.addColorStop(1, 'transparent');
+                ctx.fillStyle = aGlow;
+                ctx.beginPath();
+                ctx.arc(cx, cy, er * 1.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            if (t > 2) {
+                const ta = Math.min(1, (t - 2) / 1);
+                ctx.globalAlpha = ta;
+
+                const pulse = 1 + Math.sin(t * 4) * 0.04;
+                ctx.save();
+                ctx.translate(cx, cy + baseR * 1.4);
+                ctx.scale(pulse, pulse);
+                ctx.fillStyle = '#8cf';
+                ctx.shadowColor = 'rgba(100,180,255,0.6)';
+                ctx.shadowBlur = 15;
+                ctx.font = `${Math.min(W, H) * 0.04}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText('EARTH IS SAVED', 0, 0);
+                ctx.restore();
+
+                ctx.fillStyle = '#fc6';
+                ctx.shadowBlur = 0;
+                ctx.font = `${Math.min(W, H) * 0.02}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('THE KLINGON FLEET IS DESTROYED', cx, cy + baseR * 1.8);
+
+                ctx.fillStyle = '#8cf';
+                ctx.font = `${Math.min(W, H) * 0.018}px 'Press Start 2P'`;
+                ctx.fillText('FINAL SCORE: ' + String(score).padStart(5, '0'), cx, cy + baseR * 2.2);
+
+                ctx.fillStyle = '#adf';
+                ctx.font = `${Math.min(W, H) * 0.012}px 'Press Start 2P'`;
+                ctx.fillText('LIVE LONG AND PROSPER', cx, cy + baseR * 2.6);
+
+                if (t > 3.5 && Math.floor(t * 2) % 2 === 0) {
+                    ctx.fillStyle = '#fc6';
+                    ctx.font = `${Math.min(W, H) * 0.011}px 'Press Start 2P'`;
+                    ctx.fillText('TAP OR PRESS ENTER TO PLAY AGAIN', cx, cy + baseR * 3.1);
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ===== LOGIC =====
+        function getWaveConfig(w) {
+            return {
+                target: 5 + w * 2,
+                speed: 0.3 + w * 0.06,
+                spawnInt: Math.max(1200 - w * 100, 350),
+                maxOn: Math.min(3 + w, 12),
+            };
+        }
+
+        function spawnEnemy() {
+            const free = SLOTS.filter(s =>
+                !enemies.some(e => e.alive && Math.abs(e.x - s.x) < 0.08 && Math.abs(e.y - s.y) < 0.08)
+            );
+            if (!free.length) return;
+            const slot = free[Math.floor(Math.random() * free.length)];
+            enemies.push({
+                x: slot.x, y: slot.y, bx: slot.x, by: slot.y,
+                dir: Math.random() > 0.5 ? 1 : -1,
+                range: 0.02 + Math.random() * 0.02,
+                spd: enemySpeed * (0.7 + Math.random() * 0.6),
+                alive: true, t: 0,
+                life: 8000 + Math.random() * 5000 + wave * 1000,
+                shootCD: Math.max(400, 1200 - wave * 80) + Math.random() * 1000,
+                flash: 0,
+            });
+            if (Math.random() < 0.3) sfx.play('decloak');
+        }
+
+        function shoot() {
+            if (state !== 'playing') return;
+            sfx.play('shoot');
+
+            let closest = null, closestDist = Infinity;
+            for (let e of enemies) {
+                if (!e.alive) continue;
+                const dx = crossX - e.x, dy = crossY - e.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 0.12 && dist < closestDist) { closest = e; closestDist = dist; }
+            }
+
+            // Fire 2 phaser bolts from saucer
+            const aimX = closest ? closest.x : crossX;
+            const aimY = closest ? closest.y : crossY;
+            [[-0.015, -0.02], [0.015, -0.02]].forEach(([ox, oy], i) => {
+                const startX = 0.5 + ox, startY = 0.82 + oy;
+                const dx = aimX - startX, dy = aimY - startY;
+                const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+                const speed = 2.2;
+                setTimeout(() => {
+                    playerBolts.push({ x: startX, y: startY, vx: (dx / dist) * speed, vy: (dy / dist) * speed });
+                }, i * 40);
+            });
+
+            if (closest) {
+                closest.alive = false;
+                score += 100 * wave; killed++;
+                sfx.play('hit');
+                explosions.push({ x: closest.x, y: closest.y, progress: 0 });
+
+                for (let i = 0; i < 18; i++) {
+                    const isFlame = Math.random() > 0.3;
+                    const isSpark = Math.random() > 0.7;
+                    particles.push({
+                        x: closest.x, y: closest.y,
+                        vx: (Math.random() - 0.5) * 0.5, vy: (Math.random() - 0.5) * 0.5,
+                        rad: isSpark ? 0.001 + Math.random() * 0.002 : 0.003 + Math.random() * 0.005,
+                        alpha: 1, life: 0.5 + Math.random() * 0.6,
+                        r2: isFlame ? 100 : (isSpark ? 255 : 200),
+                        g2: isFlame ? 255 : (isSpark ? 255 : 200),
+                        b2: isFlame ? 100 : (isSpark ? 150 : 200),
+                    });
+                }
+
+                document.getElementById('hitFlashGold').classList.add('active');
+                setTimeout(() => document.getElementById('hitFlashGold').classList.remove('active'), 60);
+            }
+            updateHUD();
+        }
+
+        function takeDamage() {
+            lives--; sfx.play('damage'); updateHUD();
+            document.getElementById('hitFlash').classList.add('active');
+            setTimeout(() => document.getElementById('hitFlash').classList.remove('active'), 120);
+
+            if (lives <= 0) {
+                state = 'gameover'; sfx.play('gameover');
+                document.getElementById('finalScore').textContent = 'SCORE: ' + String(score).padStart(5, '0');
+                document.getElementById('gameOverOverlay').style.display = 'flex';
+            }
+        }
+
+        function startCountdown() {
+            state = 'countdown';
+            countdownPhase = 0; countdownTimer = 0;
+            enemies = []; explosions = []; playerBolts = []; enemyBolts = []; particles = [];
+            const cfg = getWaveConfig(wave);
+            waveTarget = cfg.target; enemySpeed = cfg.speed;
+            spawnInterval = cfg.spawnInt; maxOnScreen = cfg.maxOn;
+            killed = 0; spawnTimer = 0;
+            earthSize = Math.min(W, H) * (0.1 + wave * 0.06);
+            starSpeed = 0.2 + wave * 0.04;
+        }
+
+        function nextWave() {
+            if (wave >= MAX_WAVES) {
+                state = 'victory'; victoryTimer = 0;
+                sfx.play('victory');
+                document.getElementById('winOverlay').style.display = 'flex';
+                return;
+            }
+            wave++;
+            updateHUD();
+            startCountdown();
+        }
+
+        function updateHUD() {
+            document.getElementById('hudScore').textContent = String(score).padStart(5, '0');
+            document.getElementById('hudWave').textContent = wave + '/' + MAX_WAVES;
+            const el = document.getElementById('hudLives');
+            el.innerHTML = '';
+            for (let i = 0; i < lives; i++) {
+                const s = document.createElement('span');
+                s.textContent = '⊛'; s.style.fontSize = '14px'; s.style.color = '#8cf';
+                el.appendChild(s);
+            }
+        }
+
+        function updateCountdown(dt) {
+            countdownTimer += dt * 1000;
+            if (countdownTimer >= CD_DUR[countdownPhase]) {
+                countdownTimer = 0;
+                countdownPhase++;
+                if (countdownPhase >= 2 && countdownPhase <= 4) sfx.play('countdown');
+                if (countdownPhase === 5) sfx.play('go');
+                if (countdownPhase >= CD_DUR.length) { state = 'playing'; return; }
+            }
+        }
+
+        function update(dt) {
+            if (state === 'countdown') { updateCountdown(dt); return; }
+            if (state !== 'playing') return;
+
+            const cs = 0.5;
+            if (keys['ArrowLeft'] || keys['a']) crossX -= cs * dt;
+            if (keys['ArrowRight'] || keys['d']) crossX += cs * dt;
+            if (keys['ArrowUp'] || keys['w']) crossY -= cs * dt;
+            if (keys['ArrowDown'] || keys['s']) crossY += cs * dt;
+            crossX = Math.max(0.0, Math.min(1.0, crossX));
+            crossY = Math.max(0.0, Math.min(0.8, crossY));
+
+            spawnTimer += dt * 1000;
+            if (spawnTimer >= spawnInterval && enemies.filter(e => e.alive).length < maxOnScreen) {
+                spawnEnemy(); spawnTimer = 0;
+            }
+
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                e.t += dt * 1000;
+                e.x = e.bx + Math.sin(e.t * 0.0015 * e.spd) * e.range * e.dir;
+                e.y = e.by + Math.sin(e.t * 0.001 * e.spd) * 0.015;
+                e.x = Math.max(0.18, Math.min(0.82, e.x));
+                e.y = Math.max(0.1, Math.min(0.7, e.y));
+
+                e.shootCD -= dt * 1000;
+                if (e.shootCD <= 0) {
+                    e.flash = 150;
+                    e.shootCD = Math.max(800, 1800 - wave * 120) + Math.random() * 1200;
+                    const dx = 0.5 - e.x + (Math.random() - 0.5) * 0.15;
+                    const dy = 0.85 - e.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    const bspd = 0.45 + wave * 0.03;
+                    enemyBolts.push({ x: e.x, y: e.y + 0.03, vx: (dx / dist) * bspd, vy: (dy / dist) * bspd });
+                }
+                if (e.flash > 0) e.flash -= dt * 1000;
+                if (e.t > e.life) e.alive = false;
+            });
+            enemies = enemies.filter(e => e.alive);
+
+            playerBolts = playerBolts.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt;
+                return b.y > -0.05 && b.y < 1.05 && b.x > -0.05 && b.x < 1.05;
+            });
+
+            enemyBolts = enemyBolts.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt;
+                if (Math.abs(b.x - 0.5) < 0.04 && Math.abs(b.y - 0.85) < 0.035) {
+                    takeDamage(); return false;
+                }
+                return b.y < 1.05 && b.y > -0.05 && b.x > -0.05 && b.x < 1.05;
+            });
+
+            explosions.forEach(ex => ex.progress += dt * 1.5);
+            explosions = explosions.filter(ex => ex.progress < 1);
+
+            particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.alpha -= dt * 1.8; p.life -= dt; });
+            particles = particles.filter(p => p.life > 0 && p.alpha > 0);
+
+            if (killed >= waveTarget) nextWave();
+
+            const dx = crossX - 0.5, dy = crossY - 0.85;
+            const targetAngle = Math.atan2(dx, -dy) * 0.5;
+            const clampedTarget = Math.max(-0.7, Math.min(0.7, targetAngle));
+            playerAngle += (clampedTarget - playerAngle) * Math.min(1, dt * 8);
+        }
+
+        function draw(dt) {
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0, 0, W, H);
+
+            drawStars(dt);
+
+            if (state === 'victory') { drawVictory(dt); return; }
+
+            drawEarth();
+
+            if (state === 'countdown') {
+                drawEnterprise(0.5, 0.85, 0.065, 0);
+                drawCountdown();
+                return;
+            }
+
+            enemyBolts.forEach(drawDisruptorBolt);
+            playerBolts.forEach(drawPhaserBolt);
+
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                drawBirdOfPrey(e.x, e.y, 0.05, e.flash > 80);
+            });
+
+            explosions.forEach(drawExplosion);
+            particles.forEach(drawParticle);
+
+            drawEnterprise(0.5, 0.85, 0.065, playerAngle);
+            if (state === 'playing') drawCrosshair();
+        }
+
+        function loop(ts) {
+            const dt = Math.min((ts - lastTime) / 1000, 0.05);
+            lastTime = ts;
+            resize(); update(dt); draw(dt);
+            requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            score = 0; lives = 3; wave = 1;
+            enemies = []; explosions = []; playerBolts = []; enemyBolts = []; particles = [];
+            crossX = 0.5; crossY = 0.4; playerAngle = 0; earthSize = 0;
+            initStars(); updateHUD();
+            document.getElementById('startOverlay').style.display = 'none';
+            document.getElementById('gameOverOverlay').style.display = 'none';
+            document.getElementById('winOverlay').style.display = 'none';
+            sfx.init();
+            startCountdown();
+        }
+
+        // ===== INPUT =====
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+                else if (state === 'playing' && e.key === ' ') shoot();
+            }
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        function screenToGame(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0.0, Math.min(1.0, (clientX - rect.left) / rect.width)),
+                y: Math.max(0.0, Math.min(0.8, (clientY - rect.top) / rect.height)),
+            };
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.clientX, e.clientY);
+            crossX = pos.x; crossY = pos.y;
+        });
+
+        canvas.addEventListener('click', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+            else if (state === 'playing') {
+                const pos = screenToGame(e.clientX, e.clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') { startGame(); return; }
+            if (state === 'playing') {
+                const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+            crossX = pos.x; crossY = pos.y;
+        }, { passive: false });
+
+        ['startOverlay', 'gameOverOverlay', 'winOverlay'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); });
+            el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); }, { passive: false });
+        });
+
+        updateHUD();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
