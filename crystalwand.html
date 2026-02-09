@@ -1,0 +1,1818 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>CRYSTAL WAND</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0818;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+
+        .hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            pointer-events: none;
+            z-index: 50;
+            font-size: 10px;
+            color: #e0d0ff;
+            text-shadow: 0 0 6px rgba(180, 120, 255, 0.4), 2px 2px 0 #0a0818;
+        }
+
+        .hud-item span {
+            font-weight: bold;
+        }
+
+        .lives-display {
+            display: flex;
+            gap: 4px;
+        }
+
+        .hit-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 90;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.05s;
+        }
+
+        .hit-flash.damage {
+            background: rgba(100, 0, 150, 0.2);
+        }
+
+        .hit-flash.gem {
+            background: rgba(255, 220, 100, 0.12);
+        }
+
+        .hit-flash.damage.active,
+        .hit-flash.gem.active {
+            opacity: 1;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 80;
+            pointer-events: auto;
+            cursor: pointer;
+            background: radial-gradient(ellipse at center, rgba(20, 8, 40, 0.88), rgba(5, 0, 15, 0.96));
+        }
+
+        .overlay-text {
+            color: #e0d0ff;
+            text-align: center;
+            text-shadow: 0 0 12px rgba(180, 120, 255, 0.5);
+        }
+
+        .overlay-text .big {
+            font-size: 16px;
+            display: block;
+            margin-bottom: 14px;
+            letter-spacing: 2px;
+            color: #c8a0ff;
+        }
+
+        .overlay-text .med {
+            font-size: 9px;
+            display: block;
+            margin-bottom: 8px;
+            color: #a8d0ff;
+        }
+
+        .overlay-text .small {
+            font-size: 8px;
+            display: block;
+            opacity: 0.8;
+            color: #e0d0ff;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            49% {
+                opacity: 0.8
+            }
+
+            50%,
+            100% {
+                opacity: 0.2
+            }
+        }
+
+        @media (min-width:600px) {
+            .hud {
+                padding: 14px 22px;
+                font-size: 12px;
+            }
+
+            .overlay-text .big {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+
+    <div style="position:fixed;top:10px;left:10px;z-index:100;pointer-events:auto">
+        <a href="Index.html" style="font-family:'Press Start 2P',monospace;font-size:8px;color:#ff0;text-decoration:none;background:rgba(0,0,0,0.6);padding:6px 10px;border:1px solid #ff0;border-radius:3px">◀ ARCADE</a>
+    </div>
+
+    <div class="hud">
+        <div class="hud-item">💎 <span id="hudScore">00000</span></div>
+        <div class="hud-item">WAVE <span id="hudWave">1/9</span></div>
+        <div class="hud-item">GEMS <span id="hudGems">0</span></div>
+        <div class="hud-item lives-display" id="hudLives"></div>
+    </div>
+
+    <div class="hit-flash damage" id="hitFlashDmg"></div>
+    <div class="hit-flash gem" id="hitFlashGem"></div>
+
+    <div class="overlay" id="startOverlay">
+        <div class="overlay-text">
+            <span class="big">✦ CRYSTAL WAND ✦</span>
+            <span class="med">SHADOWS ARE STEALING THE ENCHANTED GEMS!</span>
+            <span class="med" style="color:#ffc080">DEFEAT THEM TO CRAFT THE LEGENDARY WAND</span>
+            <span class="small">✨ TAP SCREEN OR PRESS ENTER ✨</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="gameOverOverlay" style="display:none;">
+        <div class="overlay-text">
+            <span class="big">✦ DARKNESS WINS ✦</span>
+            <span class="med" id="finalScore"></span>
+            <span class="small">✨ TAP OR PRESS ENTER ✨</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="winOverlay" style="display:none;background:transparent;"></div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+
+        // Gem types unlocked per wave
+        const GEM_TYPES = [
+            { name: 'Ruby', fill: '#ff3050', shine: '#ff8090', outline: '#aa1030', glow: '#ff4060' },
+            { name: 'Sapphire', fill: '#3060ff', shine: '#80a0ff', outline: '#1030aa', glow: '#4080ff' },
+            { name: 'Emerald', fill: '#30cc50', shine: '#80ff90', outline: '#108830', glow: '#40ff60' },
+            { name: 'Amethyst', fill: '#a040e0', shine: '#c890ff', outline: '#6020a0', glow: '#b060ff' },
+            { name: 'Topaz', fill: '#ffaa20', shine: '#ffd080', outline: '#cc8010', glow: '#ffbb40' },
+            { name: 'Diamond', fill: '#c0e8ff', shine: '#ffffff', outline: '#80a8cc', glow: '#e0f0ff' },
+            { name: 'Opal', fill: '#e0c0ff', shine: '#fff0ff', outline: '#a080cc', glow: '#f0d0ff' },
+            { name: 'Star Ruby', fill: '#ff2080', shine: '#ff80c0', outline: '#cc1060', glow: '#ff40a0' },
+            { name: 'Prismatic', fill: '#fff', shine: '#fff', outline: '#ccc', glow: '#fff' },
+        ];
+
+        // ===== AUDIO =====
+        class SFX {
+            constructor() { this.ctx = null; }
+            init() {
+                if (this.ctx) return;
+                try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+            }
+            play(type) {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = () => this.ctx.createOscillator();
+                const gn = () => this.ctx.createGain();
+
+                if (type === 'shoot') {
+                    const power = Math.min(totalGems / 8, 1);
+                    [0, 0.03, 0.06].forEach((d, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(900 + i * 200 + power * 400, t + d);
+                        o.frequency.exponentialRampToValueAtTime(500 + i * 100 + power * 200, t + d + 0.08 + power * 0.04);
+                        g.gain.setValueAtTime(0.05 + power * 0.02, t + d);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.1 + power * 0.04);
+                        o.start(t + d); o.stop(t + d + 0.12 + power * 0.04);
+                    });
+                }
+                if (type === 'gem') {
+                    // Sparkly chime
+                    [1200, 1600, 2000].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.04);
+                        g.gain.setValueAtTime(0.04, t + i * 0.04);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.04 + 0.15);
+                        o.start(t + i * 0.04); o.stop(t + i * 0.04 + 0.15);
+                    });
+                }
+                if (type === 'hit') {
+                    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.35, this.ctx.sampleRate);
+                    const d = buf.getChannelData(0);
+                    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.0);
+                    const src = this.ctx.createBufferSource(), g = gn();
+                    src.buffer = buf; src.connect(g); g.connect(this.ctx.destination);
+                    g.gain.setValueAtTime(0.15, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+                    src.start(t);
+                }
+                if (type === 'shadow_atk') {
+                    const o = osc(), g = gn();
+                    o.type = 'sawtooth'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(300, t);
+                    o.frequency.exponentialRampToValueAtTime(80, t + 0.08);
+                    g.gain.setValueAtTime(0.04, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                    o.start(t); o.stop(t + 0.08);
+                }
+                if (type === 'damage') {
+                    const o = osc(), g = gn();
+                    o.type = 'sawtooth'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(200, t);
+                    o.frequency.exponentialRampToValueAtTime(40, t + 0.35);
+                    g.gain.setValueAtTime(0.1, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.35);
+                    o.start(t); o.stop(t + 0.35);
+                }
+                if (type === 'gameover') {
+                    [280, 230, 180, 130, 80].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.28);
+                        g.gain.setValueAtTime(0.06, t + i * 0.28);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.28 + 0.27);
+                        o.start(t + i * 0.28); o.stop(t + i * 0.28 + 0.28);
+                    });
+                }
+                if (type === 'countdown') {
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(700, t);
+                    g.gain.setValueAtTime(0.04, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+                    o.start(t); o.stop(t + 0.07);
+                }
+                if (type === 'go') {
+                    [1000, 1300, 1600].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.06);
+                        g.gain.setValueAtTime(0.05, t + i * 0.06);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.08);
+                        o.start(t + i * 0.06); o.stop(t + i * 0.06 + 0.08);
+                    });
+                }
+                if (type === 'wand_upgrade') {
+                    [523, 659, 784, 1047].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.12);
+                        g.gain.setValueAtTime(0.06, t + i * 0.12);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.12 + 0.2);
+                        o.start(t + i * 0.12); o.stop(t + i * 0.12 + 0.2);
+                    });
+                }
+                if (type === 'victory') {
+                    [523, 659, 784, 880, 1047, 880, 1047, 1319].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.16);
+                        g.gain.setValueAtTime(0.06, t + i * 0.16);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.16 + 0.15);
+                        o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.16);
+                    });
+                }
+            }
+        }
+
+        const sfx = new SFX();
+        const MAX_WAVES = 9;
+        let W, H, PX;
+        let state = 'start';
+        let score = 0, lives = 4, wave = 1;
+        let enemies = [], explosions = [], playerBolts = [], enemyBolts = [], particles = [];
+        let collectedGems = []; // gems that appear where shadow died, sparkle, then vanish
+        let crossX = 0.5, crossY = 0.35;
+        let keys = {};
+        let spawnTimer = 0, spawnInterval = 1200;
+        let killed = 0, waveTarget = 7;
+        let maxOnScreen = 5;
+        let lastTime = 0;
+        let wandAngle = 0;
+
+        // WAND STATE
+        let totalGems = 0;
+        let gemCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0]; // per type
+        let wandLevel = 0; // 0-9, increases each wave clear
+
+        // Background
+        let bgCrystals = [];
+        let bgSparkles = [];
+        let caveScroll = 0;
+
+        // Countdown
+        let countdownPhase = 0, countdownTimer = 0;
+        const CD_DUR = [1200, 900, 700, 700, 700, 500];
+        const CD_TEXT = ['', 'READY', '3', '2', '1', 'SHINE!'];
+        let victoryTimer = 0;
+
+        // Wand upgrade flash
+        let wandFlash = 0;
+        let newGemName = '';
+
+        // Wand upgrade screen between waves
+        let upgradeTimer = 0;
+        let upgradeGemIdx = 0;
+        const UPGRADE_DURATION = 14000; // ms to show upgrade screen
+
+        function initBg() {
+            bgCrystals = [];
+            for (let i = 0; i < 25; i++) {
+                bgCrystals.push({
+                    x: Math.random(), y: Math.random(),
+                    size: 0.3 + Math.random() * 0.8,
+                    hue: Math.random() * 360,
+                    alpha: 0.1 + Math.random() * 0.15,
+                });
+            }
+            bgSparkles = [];
+            for (let i = 0; i < 60; i++) {
+                bgSparkles.push({
+                    x: Math.random(), y: Math.random(),
+                    size: 1 + Math.random() * 2.5,
+                    phase: Math.random() * Math.PI * 2,
+                    hue: Math.random() * 360,
+                });
+            }
+        }
+
+        function resize() {
+            W = canvas.width = window.innerWidth * 2;
+            H = canvas.height = window.innerHeight * 2;
+            PX = Math.max(2, Math.floor(Math.min(W, H) / 200));
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        initBg();
+
+        // Spawn slots
+        const SLOTS = [];
+        for (let row = 0; row < 4; row++) {
+            const y = 0.08 + row * 0.10;
+            const cols = row % 2 === 0 ? 5 : 4;
+            for (let col = 0; col < cols; col++) {
+                const x = row % 2 === 0
+                    ? 0.15 + col * 0.175
+                    : 0.22 + col * 0.187;
+                SLOTS.push({ x, y });
+            }
+        }
+
+        // ===== DRAWING =====
+
+        function drawBackground(dt) {
+            caveScroll += dt * 15;
+
+            // Deep cave gradient
+            const grad = ctx.createRadialGradient(W * 0.5, H * 0.5, 0, W * 0.5, H * 0.5, Math.max(W, H) * 0.7);
+            grad.addColorStop(0, '#1a1030');
+            grad.addColorStop(0.4, '#100820');
+            grad.addColorStop(0.8, '#080415');
+            grad.addColorStop(1, '#030208');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Cave wall crystals (background decorations)
+            bgCrystals.forEach(c => {
+                const cx = c.x * W, cy = c.y * H;
+                const s = c.size * PX * 5;
+                const pulse = Math.sin(Date.now() * 0.002 + c.hue) * 0.3 + 0.7;
+
+                ctx.fillStyle = `hsla(${c.hue}, 60%, 40%, ${c.alpha * pulse})`;
+                ctx.beginPath();
+                ctx.moveTo(cx, cy - s);
+                ctx.lineTo(cx + s * 0.5, cy - s * 0.2);
+                ctx.lineTo(cx + s * 0.3, cy + s * 0.5);
+                ctx.lineTo(cx - s * 0.3, cy + s * 0.5);
+                ctx.lineTo(cx - s * 0.5, cy - s * 0.2);
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // Twinkling sparkles
+            bgSparkles.forEach(s => {
+                const twinkle = Math.sin(Date.now() * 0.004 + s.phase) * 0.5 + 0.5;
+                if (twinkle < 0.3) return;
+                const alpha = twinkle * 0.5;
+                ctx.fillStyle = `hsla(${s.hue}, 70%, 75%, ${alpha})`;
+                const sz = s.size * twinkle;
+                const sx = s.x * W, sy = s.y * H;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - sz * 2);
+                ctx.lineTo(sx + sz * 0.3, sy - sz * 0.3);
+                ctx.lineTo(sx + sz * 2, sy);
+                ctx.lineTo(sx + sz * 0.3, sy + sz * 0.3);
+                ctx.lineTo(sx, sy + sz * 2);
+                ctx.lineTo(sx - sz * 0.3, sy + sz * 0.3);
+                ctx.lineTo(sx - sz * 2, sy);
+                ctx.lineTo(sx - sz * 0.3, sy - sz * 0.3);
+                ctx.closePath();
+                ctx.fill();
+            });
+
+            // Cave floor/ground area
+            const groundY = H * 0.78;
+            ctx.fillStyle = '#0e0a18';
+            ctx.fillRect(0, groundY, W, H - groundY);
+            // Rocky edge
+            for (let i = 0; i < 30; i++) {
+                const rx = (i / 30) * W;
+                const ry = groundY + Math.sin(i * 2.3) * PX * 3;
+                ctx.fillStyle = '#1a1228';
+                ctx.fillRect(rx, ry, W / 30 + 2, PX * 4);
+            }
+        }
+
+        function drawWand(cx, cy, angle, size) {
+            const x = cx * W, y = cy * H;
+            const s = size * Math.min(W, H);
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle);
+
+            const level = wandLevel;
+            const gems = totalGems;
+
+            // === WAND HANDLE ===
+            // Base wood
+            const woodGrad = ctx.createLinearGradient(-s * 0.04, s * 0.3, s * 0.04, s * 0.3);
+            woodGrad.addColorStop(0, level >= 3 ? '#8a6030' : '#6a4a28');
+            woodGrad.addColorStop(0.5, level >= 3 ? '#a07838' : '#7a5a30');
+            woodGrad.addColorStop(1, level >= 3 ? '#8a6030' : '#6a4a28');
+            ctx.fillStyle = woodGrad;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.035, -s * 0.1);
+            ctx.lineTo(-s * 0.045, s * 0.6);
+            ctx.quadraticCurveTo(-s * 0.05, s * 0.65, -s * 0.04, s * 0.68);
+            ctx.lineTo(s * 0.04, s * 0.68);
+            ctx.quadraticCurveTo(s * 0.05, s * 0.65, s * 0.045, s * 0.6);
+            ctx.lineTo(s * 0.035, -s * 0.1);
+            ctx.closePath();
+            ctx.fill();
+
+            // Handle wrap (upgrades with level)
+            if (level >= 2) {
+                ctx.fillStyle = level >= 6 ? '#ffd040' : (level >= 4 ? '#c0a0e0' : '#a08060');
+                for (let i = 0; i < 3; i++) {
+                    const hy = s * 0.35 + i * s * 0.1;
+                    ctx.fillRect(-s * 0.05, hy, s * 0.1, s * 0.03);
+                }
+            }
+
+            // Handle pommel gem
+            if (level >= 4) {
+                const pomGem = GEM_TYPES[Math.min(level - 1, 8)];
+                ctx.fillStyle = pomGem.fill;
+                ctx.shadowColor = pomGem.glow;
+                ctx.shadowBlur = 6;
+                ctx.beginPath();
+                ctx.arc(0, s * 0.7, s * 0.04, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // === GOLD BANDS (level 3+) ===
+            if (level >= 3) {
+                ctx.fillStyle = '#ffd040';
+                ctx.fillRect(-s * 0.05, -s * 0.1, s * 0.1, s * 0.025);
+                ctx.fillRect(-s * 0.055, s * 0.15, s * 0.11, s * 0.025);
+                if (level >= 5) {
+                    ctx.fillRect(-s * 0.06, s * 0.0, s * 0.12, s * 0.03);
+                }
+            }
+
+            // === SHAFT GEMS (placed along the wand) ===
+            const gemPositions = [
+                { y: 0.05, side: 0 },
+                { y: -0.02, side: -1 },
+                { y: -0.02, side: 1 },
+                { y: 0.12, side: -1 },
+                { y: 0.12, side: 1 },
+                { y: 0.22, side: 0 },
+                { y: 0.28, side: -1 },
+                { y: 0.28, side: 1 },
+            ];
+
+            for (let i = 0; i < Math.min(gems, gemPositions.length); i++) {
+                const gp = gemPositions[i];
+                const gt = GEM_TYPES[i % GEM_TYPES.length];
+                const gx = gp.side * s * 0.06;
+                const gy = gp.y * s;
+                const gr = s * 0.025;
+
+                // Gem glow
+                ctx.shadowColor = gt.glow;
+                ctx.shadowBlur = 4;
+
+                // Diamond cut shape
+                ctx.fillStyle = gt.fill;
+                ctx.beginPath();
+                ctx.moveTo(gx, gy - gr);
+                ctx.lineTo(gx + gr * 0.8, gy - gr * 0.2);
+                ctx.lineTo(gx + gr * 0.6, gy + gr * 0.6);
+                ctx.lineTo(gx - gr * 0.6, gy + gr * 0.6);
+                ctx.lineTo(gx - gr * 0.8, gy - gr * 0.2);
+                ctx.closePath();
+                ctx.fill();
+
+                // Gem shine
+                ctx.fillStyle = gt.shine;
+                ctx.globalAlpha = 0.5;
+                ctx.beginPath();
+                ctx.moveTo(gx - gr * 0.2, gy - gr * 0.8);
+                ctx.lineTo(gx + gr * 0.3, gy - gr * 0.3);
+                ctx.lineTo(gx - gr * 0.1, gy);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+            }
+
+            // === WAND HEAD / CROWN (grows with level) ===
+            if (level >= 1) {
+                // Setting/cradle
+                const crownSize = s * (0.06 + level * 0.005);
+                ctx.fillStyle = level >= 5 ? '#ffd040' : '#aa8a50';
+                ctx.beginPath();
+                ctx.moveTo(-crownSize, -s * 0.1);
+                ctx.lineTo(-crownSize * 0.6, -s * 0.2);
+                ctx.lineTo(0, -s * 0.12);
+                ctx.lineTo(crownSize * 0.6, -s * 0.2);
+                ctx.lineTo(crownSize, -s * 0.1);
+                ctx.lineTo(crownSize * 0.8, -s * 0.05);
+                ctx.lineTo(-crownSize * 0.8, -s * 0.05);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // === MAIN CROWN GEM (grows bigger each level) ===
+            if (level >= 1) {
+                const mainGem = GEM_TYPES[Math.min(level - 1, 8)];
+                const mgr = s * (0.04 + level * 0.006);
+                const mgy = -s * 0.22 - level * s * 0.01;
+
+                // Big glow
+                ctx.shadowColor = mainGem.glow;
+                ctx.shadowBlur = 8 + level * 2;
+
+                ctx.fillStyle = mainGem.fill;
+                ctx.beginPath();
+                ctx.moveTo(0, mgy - mgr * 1.3);
+                ctx.lineTo(mgr, mgy - mgr * 0.2);
+                ctx.lineTo(mgr * 0.7, mgy + mgr * 0.8);
+                ctx.lineTo(-mgr * 0.7, mgy + mgr * 0.8);
+                ctx.lineTo(-mgr, mgy - mgr * 0.2);
+                ctx.closePath();
+                ctx.fill();
+
+                // Gem facets
+                ctx.fillStyle = mainGem.shine;
+                ctx.globalAlpha = 0.4;
+                ctx.beginPath();
+                ctx.moveTo(0, mgy - mgr * 1.3);
+                ctx.lineTo(mgr * 0.4, mgy - mgr * 0.3);
+                ctx.lineTo(-mgr * 0.2, mgy);
+                ctx.lineTo(-mgr * 0.5, mgy - mgr * 0.4);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+
+                // Prismatic sparkle on high levels
+                if (level >= 7) {
+                    const sparkT = Date.now() * 0.005;
+                    for (let i = 0; i < 4; i++) {
+                        const sa = sparkT + i * Math.PI / 2;
+                        const sd = mgr * 1.5;
+                        const sx = Math.cos(sa) * sd;
+                        const sy = mgy + Math.sin(sa) * sd;
+                        const hue = (i * 90 + Date.now() * 0.1) % 360;
+                        ctx.fillStyle = `hsla(${hue}, 90%, 80%, 0.6)`;
+                        ctx.beginPath();
+                        ctx.arc(sx, sy, mgr * 0.15, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+
+            // === STAR TOPPER (level 8+) ===
+            if (level >= 8) {
+                const stY = -s * 0.38;
+                const stR = s * 0.05;
+                const stRot = Date.now() * 0.002;
+                ctx.fillStyle = '#ffe860';
+                ctx.shadowColor = '#ffe860';
+                ctx.shadowBlur = 12;
+                ctx.beginPath();
+                for (let i = 0; i < 5; i++) {
+                    const a = -Math.PI / 2 + (i * 2 * Math.PI / 5) + stRot;
+                    const a2 = a + Math.PI / 5;
+                    if (i === 0) ctx.moveTo(Math.cos(a) * stR, stY + Math.sin(a) * stR);
+                    else ctx.lineTo(Math.cos(a) * stR, stY + Math.sin(a) * stR);
+                    ctx.lineTo(Math.cos(a2) * stR * 0.4, stY + Math.sin(a2) * stR * 0.4);
+                }
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // === WAND AURA (scales with power) ===
+            if (gems > 0) {
+                const auraR = s * (0.08 + gems * 0.008);
+                const auraY = -s * 0.18;
+                const aHue = (Date.now() * 0.03) % 360;
+                const aGrad = ctx.createRadialGradient(0, auraY, 0, 0, auraY, auraR);
+                aGrad.addColorStop(0, `hsla(${aHue}, 70%, 70%, ${0.1 + gems * 0.01})`);
+                aGrad.addColorStop(1, 'transparent');
+                ctx.fillStyle = aGrad;
+                ctx.beginPath();
+                ctx.arc(0, auraY, auraR, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Wand upgrade flash
+            if (wandFlash > 0) {
+                const fa = wandFlash;
+                ctx.fillStyle = `rgba(255,255,200,${fa * 0.3})`;
+                ctx.beginPath();
+                ctx.arc(0, -s * 0.15, s * 0.3 * (1 - fa * 0.5), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.restore();
+        }
+
+        function drawFairy(cx, cy) {
+            const x = cx * W, y = cy * H;
+            const s = Math.min(W, H) * 0.025;
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            // Wings
+            const wingFlap = Math.sin(Date.now() * 0.012) * 0.2;
+            [-1, 1].forEach(side => {
+                ctx.save();
+                ctx.scale(side, 1);
+                ctx.rotate(wingFlap * side);
+                // Outer wing
+                ctx.fillStyle = 'rgba(200,180,255,0.3)';
+                ctx.beginPath();
+                ctx.moveTo(s * 0.2, -s * 0.3);
+                ctx.quadraticCurveTo(s * 1.5, -s * 1.5, s * 1.8, -s * 0.3);
+                ctx.quadraticCurveTo(s * 1.5, s * 0.2, s * 0.2, s * 0.2);
+                ctx.closePath();
+                ctx.fill();
+                // Inner wing
+                ctx.fillStyle = 'rgba(220,200,255,0.4)';
+                ctx.beginPath();
+                ctx.moveTo(s * 0.2, 0);
+                ctx.quadraticCurveTo(s * 1.0, -s * 0.8, s * 1.2, 0);
+                ctx.quadraticCurveTo(s * 1.0, s * 0.5, s * 0.2, s * 0.3);
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            });
+
+            // Body/robe
+            const robeGrad = ctx.createLinearGradient(0, -s * 0.3, 0, s * 1.5);
+            robeGrad.addColorStop(0, '#6040a0');
+            robeGrad.addColorStop(0.5, '#5030a0');
+            robeGrad.addColorStop(1, '#3a2080');
+            ctx.fillStyle = robeGrad;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.35, -s * 0.2);
+            ctx.lineTo(-s * 0.5, s * 1.3);
+            ctx.lineTo(s * 0.5, s * 1.3);
+            ctx.lineTo(s * 0.35, -s * 0.2);
+            ctx.closePath();
+            ctx.fill();
+
+            // Robe stars
+            ctx.fillStyle = 'rgba(255,220,100,0.4)';
+            [[0, 0.4], [-0.15, 0.8], [0.2, 0.6]].forEach(([rx, ry]) => {
+                const twinkle = Math.sin(Date.now() * 0.005 + rx * 10) * 0.3 + 0.5;
+                ctx.globalAlpha = twinkle;
+                const rs = s * 0.06;
+                ctx.beginPath();
+                ctx.moveTo(rx * s, ry * s - rs * 2);
+                ctx.lineTo(rx * s + rs * 0.3, ry * s - rs * 0.3);
+                ctx.lineTo(rx * s + rs * 2, ry * s);
+                ctx.lineTo(rx * s + rs * 0.3, ry * s + rs * 0.3);
+                ctx.lineTo(rx * s, ry * s + rs * 2);
+                ctx.lineTo(rx * s - rs * 0.3, ry * s + rs * 0.3);
+                ctx.lineTo(rx * s - rs * 2, ry * s);
+                ctx.lineTo(rx * s - rs * 0.3, ry * s - rs * 0.3);
+                ctx.closePath();
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // Head
+            ctx.fillStyle = '#ffe0c0';
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.55, s * 0.35, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair
+            ctx.fillStyle = '#c090ff';
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.6, s * 0.38, Math.PI + 0.3, -0.3);
+            ctx.fill();
+            // Side hair
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.35, -s * 0.45);
+            ctx.quadraticCurveTo(-s * 0.45, s * 0.1, -s * 0.3, s * 0.4);
+            ctx.lineTo(-s * 0.2, s * 0.3);
+            ctx.quadraticCurveTo(-s * 0.3, 0, -s * 0.25, -s * 0.4);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(s * 0.35, -s * 0.45);
+            ctx.quadraticCurveTo(s * 0.45, s * 0.1, s * 0.3, s * 0.4);
+            ctx.lineTo(s * 0.2, s * 0.3);
+            ctx.quadraticCurveTo(s * 0.3, 0, s * 0.25, -s * 0.4);
+            ctx.closePath();
+            ctx.fill();
+
+            // Eyes
+            ctx.fillStyle = '#a060ff';
+            ctx.beginPath(); ctx.ellipse(-s * 0.1, -s * 0.55, s * 0.07, s * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(s * 0.1, -s * 0.55, s * 0.07, s * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#2a1050';
+            ctx.beginPath(); ctx.arc(-s * 0.1, -s * 0.53, s * 0.035, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.1, -s * 0.53, s * 0.035, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-s * 0.12, -s * 0.57, s * 0.02, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.08, -s * 0.57, s * 0.02, 0, Math.PI * 2); ctx.fill();
+
+            // Witch/wizard hat
+            ctx.fillStyle = '#5030a0';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.4, -s * 0.7);
+            ctx.lineTo(0, -s * 1.6);
+            ctx.lineTo(s * 0.4, -s * 0.7);
+            ctx.closePath();
+            ctx.fill();
+            // Hat band
+            ctx.fillStyle = '#ffd040';
+            ctx.fillRect(-s * 0.42, -s * 0.75, s * 0.84, s * 0.07);
+            // Hat star
+            ctx.fillStyle = '#ffe060';
+            const hsr = s * 0.07;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const a = -Math.PI / 2 + (i * 2 * Math.PI / 5);
+                const a2 = a + Math.PI / 5;
+                if (i === 0) ctx.moveTo(Math.cos(a) * hsr, -s * 1.15 + Math.sin(a) * hsr);
+                else ctx.lineTo(Math.cos(a) * hsr, -s * 1.15 + Math.sin(a) * hsr);
+                ctx.lineTo(Math.cos(a2) * hsr * 0.4, -s * 1.15 + Math.sin(a2) * hsr * 0.4);
+            }
+            ctx.closePath();
+            ctx.fill();
+
+            // Smile
+            ctx.strokeStyle = '#c08080';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.42, s * 0.08, 0.1, Math.PI - 0.1);
+            ctx.stroke();
+
+            // Right arm (holds wand)
+            ctx.fillStyle = '#ffe0c0';
+            ctx.beginPath();
+            ctx.moveTo(s * 0.3, -s * 0.1);
+            ctx.lineTo(s * 0.55, -s * 0.4);
+            ctx.lineTo(s * 0.65, -s * 0.35);
+            ctx.lineTo(s * 0.4, -s * 0.05);
+            ctx.closePath();
+            ctx.fill();
+            // Sleeve
+            ctx.fillStyle = '#5030a0';
+            ctx.beginPath();
+            ctx.moveTo(s * 0.28, -s * 0.05);
+            ctx.lineTo(s * 0.35, -s * 0.2);
+            ctx.lineTo(s * 0.48, -s * 0.15);
+            ctx.lineTo(s * 0.42, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Left arm (resting)
+            ctx.fillStyle = '#ffe0c0';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.3, -s * 0.1);
+            ctx.lineTo(-s * 0.5, s * 0.2);
+            ctx.lineTo(-s * 0.4, s * 0.25);
+            ctx.lineTo(-s * 0.25, -s * 0.05);
+            ctx.closePath();
+            ctx.fill();
+            ctx.fillStyle = '#5030a0';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.28, -s * 0.05);
+            ctx.lineTo(-s * 0.35, s * 0.05);
+            ctx.lineTo(-s * 0.42, s * 0.1);
+            ctx.lineTo(-s * 0.35, -s * 0.02);
+            ctx.closePath();
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawShadowCreature(cx, cy, type, flash) {
+            const x = cx * W, y = cy * H;
+            const s = Math.min(W, H) * 0.022;
+            const isBig = type === 'brute';
+
+            const bodyS = isBig ? 1.3 : 1.0;
+
+            // Shadow aura
+            const aGrad = ctx.createRadialGradient(x, y, 0, x, y, s * 2 * bodyS);
+            aGrad.addColorStop(0, flash ? 'rgba(150,80,255,0.3)' : 'rgba(40,0,60,0.3)');
+            aGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = aGrad;
+            ctx.beginPath();
+            ctx.arc(x, y, s * 2 * bodyS, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Body
+            ctx.fillStyle = flash ? '#6040a0' : '#2a1040';
+            ctx.beginPath();
+            ctx.ellipse(x, y, s * 0.7 * bodyS, s * 0.9 * bodyS, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wispy edges
+            ctx.fillStyle = flash ? '#5030a0' : '#1a0830';
+            for (let i = 0; i < 5; i++) {
+                const a = (i / 5) * Math.PI * 2 + Date.now() * 0.002;
+                const wr = s * (0.6 + Math.sin(Date.now() * 0.003 + i) * 0.2) * bodyS;
+                ctx.beginPath();
+                ctx.ellipse(x + Math.cos(a) * wr * 0.3, y + Math.sin(a) * wr * 0.3,
+                    s * 0.3 * bodyS, s * 0.15 * bodyS, a, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Eyes (glowing)
+            const eyeGlow = flash ? '#ff80ff' : '#c040ff';
+            ctx.fillStyle = eyeGlow;
+            ctx.shadowColor = eyeGlow;
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.ellipse(x - s * 0.25 * bodyS, y - s * 0.15, s * 0.12 * bodyS, s * 0.08 * bodyS, -0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(x + s * 0.25 * bodyS, y - s * 0.15, s * 0.12 * bodyS, s * 0.08 * bodyS, 0.1, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Claws (reaching)
+            if (isBig) {
+                ctx.strokeStyle = flash ? '#8060c0' : '#3a1858';
+                ctx.lineWidth = 2;
+                [-1, 1].forEach(side => {
+                    for (let c = 0; c < 3; c++) {
+                        const ca = (c - 1) * 0.3 + side * 0.5 + Math.sin(Date.now() * 0.003 + c) * 0.1;
+                        ctx.beginPath();
+                        ctx.moveTo(x + side * s * 0.6, y + s * 0.3);
+                        ctx.lineTo(x + side * s * 0.6 + Math.cos(ca) * s * 0.5,
+                            y + s * 0.3 + Math.sin(ca) * s * 0.5 + s * 0.3);
+                        ctx.stroke();
+                    }
+                });
+            }
+
+            // Stolen gem indicator (they carry a gem)
+            const stolenGem = GEM_TYPES[Math.min(wave - 1, 8)];
+            const sgr = s * 0.15 * bodyS;
+            ctx.fillStyle = stolenGem.fill;
+            ctx.shadowColor = stolenGem.glow;
+            ctx.shadowBlur = 4;
+            ctx.beginPath();
+            ctx.moveTo(x, y + s * 0.3 - sgr);
+            ctx.lineTo(x + sgr * 0.7, y + s * 0.3 + sgr * 0.3);
+            ctx.lineTo(x, y + s * 0.3 + sgr * 0.8);
+            ctx.lineTo(x - sgr * 0.7, y + s * 0.3 + sgr * 0.3);
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawMagicBolt(b) {
+            const x = b.x * W, y = b.y * H;
+            const angle = Math.atan2(b.vy, b.vx);
+            const power = Math.min(totalGems / 6, 1);
+            const sz = Math.min(W, H) * (0.008 + power * 0.012);
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle - Math.PI / 2);
+
+            // Glow scales with wand power
+            const gr = sz * (3 + power * 3);
+            const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, gr);
+            const hue = (b.hue || 280);
+            glow.addColorStop(0, `hsla(${hue}, 80%, 70%, ${0.3 + power * 0.2})`);
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, gr, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Core
+            ctx.fillStyle = `hsl(${hue}, 80%, 75%)`;
+            ctx.shadowColor = `hsl(${hue}, 80%, 80%)`;
+            ctx.shadowBlur = 6 + power * 6;
+            ctx.beginPath();
+            ctx.ellipse(0, 0, sz * (0.3 + power * 0.3), sz * (1.5 + power * 1.0), 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // White center
+            ctx.fillStyle = 'rgba(255,255,255,0.8)';
+            ctx.beginPath();
+            ctx.ellipse(0, 0, sz * 0.15, sz * 0.8, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Sparkle trail (more with power)
+            const numTrail = 3 + Math.floor(power * 4);
+            for (let i = 0; i < numTrail; i++) {
+                const ty = sz * 1.5 + i * sz * 0.8;
+                const tx = Math.sin(Date.now() * 0.01 + i * 2) * sz * (0.3 + power * 0.3);
+                const tHue = (hue + i * 40) % 360;
+                ctx.fillStyle = `hsla(${tHue}, 80%, 75%, ${0.6 - i * 0.08})`;
+                ctx.beginPath();
+                ctx.arc(tx, ty, sz * 0.12, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.shadowBlur = 0;
+            ctx.restore();
+        }
+
+        function drawDarkBolt(b) {
+            const x = b.x * W, y = b.y * H;
+            ctx.fillStyle = 'rgba(80,20,120,0.4)';
+            ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#6020a0';
+            ctx.beginPath(); ctx.arc(x, y, 4, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#a060e0';
+            ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+        }
+
+        function drawCollectedGem(cg) {
+            const x = cg.x * W, y = cg.y * H;
+            const gt = GEM_TYPES[cg.typeIdx];
+            const t = cg.t;
+            const totalLife = 1.2;
+
+            // Phase 1: pop in and grow (0 - 0.2s)
+            // Phase 2: sparkle and shine (0.2 - 0.8s)
+            // Phase 3: shrink and vanish (0.8 - 1.2s)
+            let scale, alpha;
+            if (t < 0.2) {
+                scale = (t / 0.2) * 1.2;
+                alpha = 1;
+            } else if (t < 0.4) {
+                scale = 1.2 - (t - 0.2) / 0.2 * 0.2; // settle to 1.0
+                alpha = 1;
+            } else if (t < 0.85) {
+                scale = 1.0;
+                alpha = 1;
+            } else {
+                scale = 1.0 - (t - 0.85) / (totalLife - 0.85);
+                alpha = 1.0 - (t - 0.85) / (totalLife - 0.85);
+            }
+
+            if (alpha <= 0) return;
+
+            const gr = Math.min(W, H) * 0.018 * scale;
+            const pulse = Math.sin(t * 15) * 0.15 + 1.0;
+
+            ctx.globalAlpha = alpha;
+
+            // Big glow behind
+            const glowR = gr * 3;
+            ctx.shadowColor = gt.glow;
+            ctx.shadowBlur = 12 * alpha;
+            const glow = ctx.createRadialGradient(x, y, 0, x, y, glowR);
+            glow.addColorStop(0, `hsla(0, 0%, 100%, ${0.3 * alpha})`);
+            glow.addColorStop(0.4, `hsla(0, 0%, 100%, ${0.1 * alpha})`);
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(x, y, glowR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Gem diamond shape
+            ctx.fillStyle = gt.fill;
+            ctx.beginPath();
+            ctx.moveTo(x, y - gr * pulse * 1.3);
+            ctx.lineTo(x + gr * pulse, y);
+            ctx.lineTo(x, y + gr * pulse * 0.7);
+            ctx.lineTo(x - gr * pulse, y);
+            ctx.closePath();
+            ctx.fill();
+
+            // Facet shine
+            ctx.fillStyle = gt.shine;
+            ctx.globalAlpha = alpha * 0.5;
+            ctx.beginPath();
+            ctx.moveTo(x - gr * 0.15, y - gr * pulse * 1.1);
+            ctx.lineTo(x + gr * 0.4, y - gr * 0.15);
+            ctx.lineTo(x - gr * 0.2, y + gr * 0.1);
+            ctx.closePath();
+            ctx.fill();
+
+            // Rotating sparkle rays
+            ctx.globalAlpha = alpha;
+            const numRays = 6;
+            for (let i = 0; i < numRays; i++) {
+                const a = (i / numRays) * Math.PI * 2 + t * 4;
+                const rayLen = gr * (1.5 + Math.sin(t * 8 + i * 2) * 0.5);
+                const hue = (i * 60 + t * 200) % 360;
+                ctx.strokeStyle = `hsla(${hue}, 80%, 80%, ${alpha * 0.6})`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(x + Math.cos(a) * gr * 0.5, y + Math.sin(a) * gr * 0.5);
+                ctx.lineTo(x + Math.cos(a) * rayLen, y + Math.sin(a) * rayLen);
+                ctx.stroke();
+            }
+
+            // Star sparkle points
+            for (let i = 0; i < 4; i++) {
+                const sa = t * 3 + i * Math.PI / 2;
+                const sd = gr * 2.0 * scale;
+                const sx = x + Math.cos(sa) * sd;
+                const sy = y + Math.sin(sa) * sd;
+                const sAlpha = Math.sin(t * 10 + i * 3) * 0.3 + 0.5;
+                ctx.fillStyle = `rgba(255,255,220,${sAlpha * alpha})`;
+                const sr = gr * 0.2;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - sr * 2);
+                ctx.lineTo(sx + sr * 0.3, sy - sr * 0.3);
+                ctx.lineTo(sx + sr * 2, sy);
+                ctx.lineTo(sx + sr * 0.3, sy + sr * 0.3);
+                ctx.lineTo(sx, sy + sr * 2);
+                ctx.lineTo(sx - sr * 0.3, sy + sr * 0.3);
+                ctx.lineTo(sx - sr * 2, sy);
+                ctx.lineTo(sx - sr * 0.3, sy - sr * 0.3);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            ctx.shadowBlur = 0;
+            ctx.globalAlpha = 1;
+        }
+
+        function drawExplosion(ex) {
+            const x = ex.x * W, y = ex.y * H;
+            const p = ex.progress;
+            const r = (15 + p * 55) * (Math.min(W, H) / 600);
+
+            for (let i = 0; i < 10; i++) {
+                const a = (i / 10) * Math.PI * 2 + p * 4;
+                const dist = r * (0.2 + p * 0.8);
+                const alpha = Math.max(0, 1 - p * 1.5);
+                const hue = (i * 36 + Date.now() * 0.1) % 360;
+                ctx.fillStyle = `hsla(${hue}, 80%, 70%, ${alpha})`;
+                const sx = x + Math.cos(a) * dist;
+                const sy = y + Math.sin(a) * dist;
+                const sz = r * 0.07 * (1 - p * 0.5);
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - sz * 2);
+                ctx.lineTo(sx + sz * 0.3, sy - sz * 0.3);
+                ctx.lineTo(sx + sz * 2, sy);
+                ctx.lineTo(sx + sz * 0.3, sy + sz * 0.3);
+                ctx.lineTo(sx, sy + sz * 2);
+                ctx.lineTo(sx - sz * 0.3, sy + sz * 0.3);
+                ctx.lineTo(sx - sz * 2, sy);
+                ctx.lineTo(sx - sz * 0.3, sy - sz * 0.3);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            if (p < 0.25) {
+                ctx.fillStyle = `rgba(255,255,255,${1 - p / 0.25})`;
+                ctx.beginPath(); ctx.arc(x, y, r * 0.25 * (1 - p), 0, Math.PI * 2); ctx.fill();
+            }
+        }
+
+        function drawParticle(p) {
+            ctx.fillStyle = `hsla(${p.hue || 280}, 80%, 70%, ${p.alpha})`;
+            const sz = p.rad * Math.min(W, H);
+            ctx.beginPath(); ctx.arc(p.x * W, p.y * H, sz, 0, Math.PI * 2); ctx.fill();
+        }
+
+        function drawCrosshair() {
+            const x = crossX * W, y = crossY * H;
+            const r = Math.min(W, H) * 0.018;
+            const t = Date.now() * 0.003;
+            const power = Math.min(totalGems / 8, 1);
+            const hue = (Date.now() * 0.05) % 360;
+
+            ctx.strokeStyle = `hsla(${hue}, 70%, 70%, 0.5)`;
+            ctx.lineWidth = 1.5;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(t);
+            // Diamond
+            ctx.beginPath();
+            ctx.moveTo(0, -r); ctx.lineTo(r, 0); ctx.lineTo(0, r); ctx.lineTo(-r, 0);
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+
+            // Cross
+            ctx.strokeStyle = `hsla(${hue}, 60%, 75%, 0.4)`;
+            ctx.beginPath();
+            ctx.moveTo(x - r * 1.3, y); ctx.lineTo(x - r * 0.4, y);
+            ctx.moveTo(x + r * 0.4, y); ctx.lineTo(x + r * 1.3, y);
+            ctx.moveTo(x, y - r * 1.3); ctx.lineTo(x, y - r * 0.4);
+            ctx.moveTo(x, y + r * 0.4); ctx.lineTo(x, y + r * 1.3);
+            ctx.stroke();
+
+            ctx.fillStyle = `hsla(${hue}, 80%, 80%, 0.7)`;
+            ctx.beginPath(); ctx.arc(x, y, 2, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // ===== COUNTDOWN / VICTORY =====
+        function drawCountdown() {
+            const cx = W / 2, cy = H / 2;
+            ctx.fillStyle = '#e0d0ff';
+            ctx.font = `${Math.min(W, H) * 0.022}px 'Press Start 2P'`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(180,100,255,0.4)'; ctx.shadowBlur = 10;
+            ctx.fillText('WAVE ' + wave + ' OF ' + MAX_WAVES, cx, cy - Math.min(W, H) * 0.1);
+
+            const text = CD_TEXT[countdownPhase];
+            if (text) {
+                const isNum = ['3', '2', '1'].includes(text);
+                const isGo = text === 'SHINE!';
+                const fontSize = isNum ? 0.1 : (isGo ? 0.055 : 0.018);
+                const phase = countdownTimer / CD_DUR[countdownPhase];
+                const scale = isNum ? 1 + Math.sin(phase * Math.PI) * 0.15 : 1;
+                const alpha = isGo ? Math.max(0, 1 - phase * 2) : 1;
+
+                ctx.save();
+                ctx.translate(cx, cy + Math.min(W, H) * 0.02);
+                ctx.scale(scale, scale);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = isGo ? '#ffe080' : '#c8a0ff';
+                ctx.font = `${Math.min(W, H) * fontSize}px 'Press Start 2P'`;
+                ctx.fillText(text, 0, 0);
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        function drawWandUpgrade(dt) {
+            upgradeTimer += dt * 1000;
+            const cx = W / 2, cy = H * 0.5;
+            const s = Math.min(W, H);
+            const t = upgradeTimer / 1000;
+            const gemType = GEM_TYPES[upgradeGemIdx];
+
+            // Darken background
+            ctx.fillStyle = 'rgba(10,4,24,0.85)';
+            ctx.fillRect(0, 0, W, H);
+
+            // Draw the wand centered and big
+            const wScale = Math.min(1, t * 2);
+            drawWand(0.5, 0.55, 0, 0.18 * wScale);
+
+            // Gem earned banner
+            if (t > 0.4) {
+                const ba = Math.min(1, (t - 0.4) * 2);
+                ctx.globalAlpha = ba;
+                ctx.shadowColor = 'rgba(180,120,255,0.5)'; ctx.shadowBlur = 12;
+
+                ctx.fillStyle = '#ffe080';
+                ctx.font = `${s * 0.022}px 'Press Start 2P'`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('WAVE ' + (wave - 1) + ' COMPLETE!', cx, H * 0.15);
+
+                ctx.shadowBlur = 0;
+                ctx.globalAlpha = 1;
+            }
+
+            // "You earned" text + gem name
+            if (t > 0.8) {
+                const ta = Math.min(1, (t - 0.8) * 2);
+                ctx.globalAlpha = ta;
+
+                ctx.fillStyle = '#c8a0ff';
+                ctx.font = `${s * 0.016}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('YOU EARNED A', cx, H * 0.22);
+
+                // Gem name in gem color, pulsing
+                const pulse = 1 + Math.sin(t * 5) * 0.08;
+                ctx.save();
+                ctx.translate(cx, H * 0.28);
+                ctx.scale(pulse, pulse);
+                ctx.fillStyle = gemType.fill;
+                ctx.shadowColor = gemType.glow;
+                ctx.shadowBlur = 10;
+                ctx.font = `${s * 0.03}px 'Press Start 2P'`;
+                ctx.fillText(gemType.name.toUpperCase(), 0, 0);
+                ctx.shadowBlur = 0;
+                ctx.restore();
+
+                ctx.globalAlpha = 1;
+            }
+
+            // Floating gem icon orbiting the wand head
+            if (t > 1.0) {
+                const orbitA = t * 1.5;
+                const orbitR = s * 0.09;
+                const gx = cx + Math.cos(orbitA) * orbitR;
+                const gy = H * 0.42 + Math.sin(orbitA) * orbitR * 0.4;
+                const gr = s * 0.025;
+
+                ctx.shadowColor = gemType.glow;
+                ctx.shadowBlur = 10;
+                ctx.fillStyle = gemType.fill;
+                ctx.beginPath();
+                ctx.moveTo(gx, gy - gr);
+                ctx.lineTo(gx + gr * 0.7, gy);
+                ctx.lineTo(gx, gy + gr * 0.5);
+                ctx.lineTo(gx - gr * 0.7, gy);
+                ctx.closePath();
+                ctx.fill();
+
+                // Gem shine
+                ctx.fillStyle = gemType.shine;
+                ctx.globalAlpha = 0.4;
+                ctx.beginPath();
+                ctx.moveTo(gx - gr * 0.1, gy - gr * 0.8);
+                ctx.lineTo(gx + gr * 0.3, gy - gr * 0.1);
+                ctx.lineTo(gx - gr * 0.2, gy);
+                ctx.closePath();
+                ctx.fill();
+                ctx.globalAlpha = 1;
+                ctx.shadowBlur = 0;
+
+                // Sparkles around gem
+                for (let i = 0; i < 6; i++) {
+                    const sa = orbitA * 2 + i * Math.PI / 3;
+                    const sd = gr * 2;
+                    const sx = gx + Math.cos(sa) * sd;
+                    const sy = gy + Math.sin(sa) * sd;
+                    const sAlpha = Math.sin(t * 6 + i * 2) * 0.3 + 0.5;
+                    ctx.fillStyle = `rgba(255,255,200,${sAlpha})`;
+                    ctx.beginPath();
+                    ctx.arc(sx, sy, gr * 0.12, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            }
+
+            // Show all collected gems so far as small icons
+            if (t > 1.5) {
+                const ga = Math.min(1, (t - 1.5) * 2);
+                ctx.globalAlpha = ga;
+                ctx.fillStyle = '#a090c0';
+                ctx.font = `${s * 0.01}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('WAND GEMS:', cx, H * 0.75);
+
+                const numGems = Math.min(wave, 9);
+                const spacing = s * 0.04;
+                const startGX = cx - ((numGems - 1) * spacing) / 2;
+                for (let i = 0; i < numGems; i++) {
+                    const gt = GEM_TYPES[i];
+                    const igx = startGX + i * spacing;
+                    const igy = H * 0.80;
+                    const igr = s * 0.01;
+
+                    ctx.fillStyle = i < wave ? gt.fill : '#333';
+                    ctx.shadowColor = i < wave ? gt.glow : 'transparent';
+                    ctx.shadowBlur = i < wave ? 4 : 0;
+                    ctx.beginPath();
+                    ctx.moveTo(igx, igy - igr);
+                    ctx.lineTo(igx + igr * 0.7, igy);
+                    ctx.lineTo(igx, igy + igr * 0.5);
+                    ctx.lineTo(igx - igr * 0.7, igy);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            // Tap to continue hint
+            if (upgradeTimer > 3000 && Math.floor(Date.now() / 600) % 2 === 0) {
+                ctx.fillStyle = '#a090c0';
+                ctx.font = `${s * 0.009}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('TAP OR PRESS ENTER TO CONTINUE', cx, H * 0.92);
+            }
+
+            // Auto-transition
+            if (upgradeTimer >= UPGRADE_DURATION) {
+                startCountdown();
+            }
+        }
+
+        function drawVictory(dt) {
+            victoryTimer += dt;
+            const cx = W / 2, cy = H * 0.3;
+            const t = victoryTimer;
+            const s = Math.min(W, H);
+
+            // Draw the legendary wand big and centered
+            if (t > 0.5) {
+                const wScale = Math.min(1, (t - 0.5) * 0.5);
+                drawWand(0.5, 0.42, 0, 0.22 * wScale);
+
+                // Orbiting gems
+                for (let i = 0; i < 9; i++) {
+                    const a = t * 1.5 + (i / 9) * Math.PI * 2;
+                    const orbitR = s * 0.12 * wScale;
+                    const gx = cx + Math.cos(a) * orbitR;
+                    const gy = H * 0.42 + Math.sin(a) * orbitR * 0.4;
+                    const gt = GEM_TYPES[i];
+                    const gr = s * 0.01;
+                    ctx.fillStyle = gt.fill;
+                    ctx.shadowColor = gt.glow;
+                    ctx.shadowBlur = 6;
+                    ctx.beginPath();
+                    ctx.moveTo(gx, gy - gr);
+                    ctx.lineTo(gx + gr * 0.7, gy);
+                    ctx.lineTo(gx, gy + gr * 0.5);
+                    ctx.lineTo(gx - gr * 0.7, gy);
+                    ctx.closePath();
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            }
+
+            if (t > 2) {
+                const ta = Math.min(1, (t - 2) / 1);
+                ctx.globalAlpha = ta;
+                ctx.shadowColor = 'rgba(180,120,255,0.5)'; ctx.shadowBlur = 12;
+
+                const pulse = 1 + Math.sin(t * 4) * 0.04;
+                ctx.save();
+                ctx.translate(cx, H * 0.65);
+                ctx.scale(pulse, pulse);
+                ctx.fillStyle = '#c8a0ff';
+                ctx.font = `${s * 0.035}px 'Press Start 2P'`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('LEGENDARY WAND', 0, 0);
+                ctx.restore();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#ffc080';
+                ctx.font = `${s * 0.016}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('CRAFTED!', cx, H * 0.70);
+
+                ctx.fillStyle = '#a0d0ff';
+                ctx.font = `${s * 0.014}px 'Press Start 2P'`;
+                ctx.fillText('ALL SHADOWS BANISHED — GEMS RESTORED', cx, H * 0.76);
+
+                ctx.fillStyle = '#e0d0ff';
+                ctx.font = `${s * 0.014}px 'Press Start 2P'`;
+                ctx.fillText('GEMS: ' + totalGems + '  SCORE: ' + String(score).padStart(5, '0'), cx, H * 0.81);
+
+                ctx.fillStyle = '#ffe080';
+                ctx.font = `${s * 0.011}px 'Press Start 2P'`;
+                ctx.fillText('MASTER ENCHANTRESS', cx, H * 0.86);
+
+                if (t > 3.5 && Math.floor(t * 2) % 2 === 0) {
+                    ctx.fillStyle = '#e0d0ff';
+                    ctx.font = `${s * 0.01}px 'Press Start 2P'`;
+                    ctx.fillText('TAP OR PRESS ENTER TO PLAY AGAIN', cx, H * 0.92);
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ===== LOGIC =====
+        function getWaveConfig(w) {
+            return {
+                target: 5 + w * 2,
+                spawnInt: Math.max(1100 - w * 90, 380),
+                maxOn: Math.min(4 + w, 12),
+                bruteChance: Math.min(0.1 + w * 0.06, 0.5),
+            };
+        }
+
+        function spawnEnemy() {
+            const cfg = getWaveConfig(wave);
+            const isBrute = Math.random() < cfg.bruteChance;
+
+            const free = SLOTS.filter(s =>
+                !enemies.some(e => e.alive && Math.abs(e.x - s.x) < 0.08 && Math.abs(e.y - s.y) < 0.06)
+            );
+            if (!free.length) return;
+            const slot = free[Math.floor(Math.random() * free.length)];
+
+            enemies.push({
+                x: slot.x, y: slot.y, bx: slot.x, by: slot.y,
+                type: isBrute ? 'brute' : 'wisp',
+                alive: true, t: 0,
+                life: 7000 + Math.random() * 4000 + wave * 800,
+                shootCD: isBrute ? (2500 + Math.random() * 2000) : (1800 + Math.random() * 1800),
+                flash: 0,
+                dir: Math.random() > 0.5 ? 1 : -1,
+                range: 0.02 + Math.random() * 0.02,
+                spd: 0.3 + Math.random() * 0.3,
+                hp: isBrute ? (wave >= 5 ? 3 : 2) : 1,
+            });
+        }
+
+        function shoot() {
+            if (state !== 'playing') return;
+            sfx.play('shoot');
+
+            let closest = null, closestDist = Infinity;
+            for (let e of enemies) {
+                if (!e.alive) continue;
+                const dx = crossX - e.x, dy = crossY - e.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 0.25 && dist < closestDist) { closest = e; closestDist = dist; }
+            }
+
+            const aimX = closest ? closest.x : crossX;
+            const aimY = closest ? closest.y : crossY;
+            const startX = 0.515, startY = 0.855;
+            const dx = aimX - startX, dy = aimY - startY;
+            const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+            const speed = 2.0;
+            playerBolts.push({
+                x: startX, y: startY, vx: (dx / d) * speed, vy: (dy / d) * speed,
+                hue: (wave - 1) * 40 + Date.now() * 0.03
+            });
+            updateHUD();
+        }
+
+        function takeDamage() {
+            lives--; sfx.play('damage'); updateHUD();
+            document.getElementById('hitFlashDmg').classList.add('active');
+            setTimeout(() => document.getElementById('hitFlashDmg').classList.remove('active'), 120);
+            if (lives <= 0) {
+                state = 'gameover'; sfx.play('gameover');
+                document.getElementById('finalScore').textContent = 'SCORE: ' + String(score).padStart(5, '0') + '  GEMS: ' + totalGems;
+                document.getElementById('gameOverOverlay').style.display = 'flex';
+            }
+        }
+
+        function startCountdown() {
+            state = 'countdown'; countdownPhase = 0; countdownTimer = 0;
+            enemies = []; explosions = []; playerBolts = []; enemyBolts = []; particles = []; collectedGems = [];
+            const cfg = getWaveConfig(wave);
+            waveTarget = cfg.target; spawnInterval = cfg.spawnInt; maxOnScreen = cfg.maxOn;
+            killed = 0; spawnTimer = 0;
+            wandLevel = wave;
+        }
+
+        function nextWave() {
+            if (wave >= MAX_WAVES) {
+                state = 'victory'; victoryTimer = 0; sfx.play('victory');
+                document.getElementById('winOverlay').style.display = 'flex';
+                return;
+            }
+            // Show wand upgrade screen before next wave
+            upgradeGemIdx = Math.min(wave - 1, 8);
+            wave++;
+            wandLevel = wave;
+            upgradeTimer = 0;
+            state = 'wand_upgrade';
+            enemies = []; explosions = []; playerBolts = []; enemyBolts = []; particles = []; collectedGems = [];
+            sfx.play('wand_upgrade');
+            updateHUD();
+        }
+
+        function updateHUD() {
+            document.getElementById('hudScore').textContent = String(score).padStart(5, '0');
+            document.getElementById('hudWave').textContent = wave + '/' + MAX_WAVES;
+            document.getElementById('hudGems').textContent = totalGems;
+            const el = document.getElementById('hudLives');
+            el.innerHTML = '';
+            for (let i = 0; i < lives; i++) {
+                const s = document.createElement('span');
+                s.textContent = '✦'; s.style.fontSize = '14px'; s.style.color = '#c8a0ff';
+                s.style.textShadow = '0 0 4px rgba(180,100,255,0.5)';
+                el.appendChild(s);
+            }
+        }
+
+        function updateCountdown(dt) {
+            countdownTimer += dt * 1000;
+            if (countdownTimer >= CD_DUR[countdownPhase]) {
+                countdownTimer = 0; countdownPhase++;
+                if (countdownPhase >= 2 && countdownPhase <= 4) sfx.play('countdown');
+                if (countdownPhase === 5) sfx.play('go');
+                if (countdownPhase >= CD_DUR.length) { state = 'playing'; return; }
+            }
+        }
+
+        function update(dt) {
+            wandFlash = Math.max(0, wandFlash - dt * 2);
+
+            if (state === 'countdown') { updateCountdown(dt); return; }
+            if (state !== 'playing') return;
+
+            const cs = 0.5;
+            if (keys['ArrowLeft'] || keys['a']) crossX -= cs * dt;
+            if (keys['ArrowRight'] || keys['d']) crossX += cs * dt;
+            if (keys['ArrowUp'] || keys['w']) crossY -= cs * dt;
+            if (keys['ArrowDown'] || keys['s']) crossY += cs * dt;
+            crossX = Math.max(0.0, Math.min(1.0, crossX));
+            crossY = Math.max(0.0, Math.min(0.75, crossY));
+
+            spawnTimer += dt * 1000;
+            if (spawnTimer >= spawnInterval && enemies.filter(e => e.alive).length < maxOnScreen) {
+                spawnEnemy(); spawnTimer = 0;
+            }
+
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                e.t += dt * 1000;
+                e.x = e.bx + Math.sin(e.t * 0.001 * e.spd) * e.range * e.dir;
+                e.y = e.by + Math.sin(e.t * 0.0008 * e.spd) * 0.012;
+                e.x = Math.max(0.08, Math.min(0.92, e.x));
+
+                e.shootCD -= dt * 1000;
+                if (e.shootCD <= 0) {
+                    e.flash = 150;
+                    e.shootCD = e.type === 'brute'
+                        ? Math.max(1800, 3000 - wave * 100) + Math.random() * 1500
+                        : Math.max(1400, 2600 - wave * 100) + Math.random() * 1200;
+                    sfx.play('shadow_atk');
+
+                    const dx = 0.515 - e.x + (Math.random() - 0.5) * 0.12;
+                    const dy = 0.87 - e.y;
+                    const d = Math.sqrt(dx * dx + dy * dy);
+                    const bspd = 0.30 + wave * 0.02;
+                    enemyBolts.push({ x: e.x, y: e.y + 0.02, vx: (dx / d) * bspd, vy: (dy / d) * bspd });
+                }
+                if (e.flash > 0) e.flash -= dt * 1000;
+                if (e.t > e.life) e.alive = false;
+            });
+            enemies = enemies.filter(e => e.alive);
+
+            playerBolts = playerBolts.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt;
+                // Check bolt collision with enemies
+                for (let e of enemies) {
+                    if (!e.alive) continue;
+                    const dx = b.x - e.x, dy = b.y - e.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 0.07) {
+                        if (e.hp > 1) {
+                            e.hp--; e.flash = 200;
+                            sfx.play('hit');
+                            for (let i = 0; i < 5; i++) {
+                                particles.push({
+                                    x: e.x, y: e.y,
+                                    vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+                                    rad: 0.003, alpha: 1, life: 0.3, hue: Math.random() * 360,
+                                });
+                            }
+                        } else {
+                            e.alive = false;
+                            const pts = e.type === 'brute' ? 200 * wave : 100 * wave;
+                            score += pts;
+                            killed++;
+                            sfx.play('hit');
+                            explosions.push({ x: e.x, y: e.y, progress: 0 });
+                            const gemIdx = Math.min(wave - 1, 8);
+                            collectedGems.push({
+                                x: e.x, y: e.y,
+                                typeIdx: gemIdx,
+                                t: 0,
+                            });
+                            // Collect after sparkle
+                            setTimeout(() => {
+                                totalGems++;
+                                gemCounts[gemIdx]++;
+                                sfx.play('gem');
+                                wandFlash = 1;
+                                updateHUD();
+                            }, 600);
+                            for (let i = 0; i < 12; i++) {
+                                particles.push({
+                                    x: e.x, y: e.y,
+                                    vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
+                                    rad: 0.003 + Math.random() * 0.005, alpha: 1,
+                                    life: 0.4 + Math.random() * 0.3,
+                                    hue: (i * 30 + wave * 40) % 360,
+                                });
+                            }
+                            document.getElementById('hitFlashGem').classList.add('active');
+                            setTimeout(() => document.getElementById('hitFlashGem').classList.remove('active'), 60);
+                            updateHUD();
+                        }
+                        return false; // bolt consumed
+                    }
+                }
+                return b.y > -0.05 && b.y < 1.05 && b.x > -0.05 && b.x < 1.05;
+            });
+
+            enemyBolts = enemyBolts.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt;
+                if (Math.abs(b.x - 0.5) < 0.05 && Math.abs(b.y - 0.87) < 0.05) {
+                    takeDamage(); return false;
+                }
+                return b.y < 1.05 && b.y > -0.05;
+            });
+
+            // Collected gems sparkle and fade
+            collectedGems.forEach(cg => { cg.t += dt; });
+            collectedGems = collectedGems.filter(cg => cg.t < 1.2);
+
+            explosions.forEach(ex => ex.progress += dt * 2.0);
+            explosions = explosions.filter(ex => ex.progress < 1);
+
+            particles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.alpha -= dt * 2; p.life -= dt; });
+            particles = particles.filter(p => p.life > 0 && p.alpha > 0);
+
+            if (killed >= waveTarget) nextWave();
+
+            const wdx = crossX - 0.515, wdy = crossY - 0.855;
+            const targetAngle = Math.atan2(wdx, -wdy);
+            const clampedTarget = Math.max(-1.2, Math.min(1.2, targetAngle));
+            wandAngle += (clampedTarget - wandAngle) * Math.min(1, dt * 10);
+        }
+
+        function draw(dt) {
+            ctx.clearRect(0, 0, W, H);
+            drawBackground(dt);
+
+            if (state === 'victory') {
+                drawFairy(0.5, 0.85);
+                drawVictory(dt);
+                return;
+            }
+
+            if (state === 'wand_upgrade') {
+                drawWandUpgrade(dt);
+                return;
+            }
+
+            // Enemy bolts
+            enemyBolts.forEach(drawDarkBolt);
+            // Player bolts
+            playerBolts.forEach(drawMagicBolt);
+
+            // Enemies
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                drawShadowCreature(e.x, e.y, e.type, e.flash > 80);
+            });
+
+            explosions.forEach(drawExplosion);
+            collectedGems.forEach(drawCollectedGem);
+            particles.forEach(drawParticle);
+
+            // Draw fairy
+            drawFairy(0.5, 0.87);
+
+            // Draw wand (held by fairy, positioned to side)
+            const wandBaseAngle = -Math.PI + wandAngle;
+            if (state === 'playing') {
+                drawWand(0.515, 0.855, wandBaseAngle, 0.08);
+            } else if (state === 'countdown') {
+                drawWand(0.515, 0.855, -Math.PI, 0.08);
+                drawCountdown();
+                return;
+            }
+
+            if (state === 'playing') drawCrosshair();
+        }
+
+        function loop(ts) {
+            const dt = Math.min((ts - lastTime) / 1000, 0.05);
+            lastTime = ts;
+            resize(); update(dt); draw(dt);
+            requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            score = 0; lives = 4; wave = 1;
+            totalGems = 0; gemCounts = [0, 0, 0, 0, 0, 0, 0, 0, 0]; wandLevel = 0;
+            enemies = []; explosions = []; playerBolts = []; enemyBolts = [];
+            particles = []; collectedGems = [];
+            crossX = 0.5; crossY = 0.35; wandAngle = 0; wandFlash = 0;
+            initBg(); updateHUD();
+            document.getElementById('startOverlay').style.display = 'none';
+            document.getElementById('gameOverOverlay').style.display = 'none';
+            document.getElementById('winOverlay').style.display = 'none';
+            sfx.init(); startCountdown();
+        }
+
+        // ===== INPUT =====
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+                else if (state === 'wand_upgrade' && upgradeTimer > 2000) startCountdown();
+                else if (state === 'playing' && e.key === ' ') shoot();
+            }
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        function screenToGame(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0.0, Math.min(1.0, (clientX - rect.left) / rect.width)),
+                y: Math.max(0.0, Math.min(0.75, (clientY - rect.top) / rect.height)),
+            };
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.clientX, e.clientY);
+            crossX = pos.x; crossY = pos.y;
+        });
+
+        canvas.addEventListener('click', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+            else if (state === 'wand_upgrade' && upgradeTimer > 2000) startCountdown();
+            else if (state === 'playing') {
+                const pos = screenToGame(e.clientX, e.clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') { startGame(); return; }
+            if (state === 'wand_upgrade' && upgradeTimer > 2000) { startCountdown(); return; }
+            if (state === 'playing') {
+                const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+            crossX = pos.x; crossY = pos.y;
+        }, { passive: false });
+
+        ['startOverlay', 'gameOverOverlay', 'winOverlay'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); });
+            el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); }, { passive: false });
+        });
+
+        updateHUD();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>

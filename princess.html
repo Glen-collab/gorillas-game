@@ -1,0 +1,1560 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>PRINCESS BUBBLE BURST</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #1a0a2e;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: url("data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' width='24' height='24'><text y='18' font-size='18'>✨</text></svg>") 12 12, crosshair;
+        }
+
+        .hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 14px;
+            pointer-events: none;
+            z-index: 50;
+            font-size: 10px;
+            color: #ffc0e8;
+            text-shadow: 0 0 8px rgba(255, 150, 220, 0.5), 2px 2px 0 #2a0a3e;
+        }
+
+        .hud-item span {
+            font-weight: bold;
+        }
+
+        .lives-display {
+            display: flex;
+            gap: 4px;
+        }
+
+        .hit-flash {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 90;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.05s;
+        }
+
+        .hit-flash.damage {
+            background: rgba(180, 50, 255, 0.2);
+        }
+
+        .hit-flash.pop {
+            background: rgba(255, 180, 220, 0.15);
+        }
+
+        .hit-flash.damage.active,
+        .hit-flash.pop.active {
+            opacity: 1;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 80;
+            pointer-events: auto;
+            cursor: pointer;
+            background: radial-gradient(ellipse at center, rgba(40, 10, 60, 0.85), rgba(10, 0, 20, 0.95));
+        }
+
+        .overlay-text {
+            color: #ffc0e8;
+            text-align: center;
+            text-shadow: 0 0 15px rgba(255, 150, 220, 0.6);
+        }
+
+        .overlay-text .big {
+            font-size: 16px;
+            display: block;
+            margin-bottom: 16px;
+            letter-spacing: 2px;
+            color: #ffaadd;
+        }
+
+        .overlay-text .med {
+            font-size: 9px;
+            display: block;
+            margin-bottom: 10px;
+            color: #c8a0ff;
+        }
+
+        .overlay-text .small {
+            font-size: 8px;
+            display: block;
+            opacity: 0.8;
+            color: #ffc0e8;
+            animation: sparkle 1s infinite;
+        }
+
+        @keyframes sparkle {
+
+            0%,
+            49% {
+                opacity: 0.9;
+                text-shadow: 0 0 10px #f8d
+            }
+
+            50%,
+            100% {
+                opacity: 0.3;
+                text-shadow: none
+            }
+        }
+
+        @media (min-width:600px) {
+            .hud {
+                padding: 14px 22px;
+                font-size: 12px;
+            }
+
+            .overlay-text .big {
+                font-size: 22px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+
+    <div style="position:fixed;top:10px;left:10px;z-index:100;pointer-events:auto">
+        <a href="Index.html" style="font-family:'Press Start 2P',monospace;font-size:8px;color:#ff0;text-decoration:none;background:rgba(0,0,0,0.6);padding:6px 10px;border:1px solid #ff0;border-radius:3px">◀ ARCADE</a>
+    </div>
+
+    <div class="hud">
+        <div class="hud-item">✨ <span id="hudScore">00000</span></div>
+        <div class="hud-item">WAVE <span id="hudWave">1/9</span></div>
+        <div class="hud-item lives-display" id="hudLives"></div>
+    </div>
+
+    <div class="hit-flash damage" id="hitFlashDmg"></div>
+    <div class="hit-flash pop" id="hitFlashPop"></div>
+
+    <div class="overlay" id="startOverlay">
+        <div class="overlay-text">
+            <span class="big">👑 PRINCESS BUBBLE BURST 👑</span>
+            <span class="med">POP ALL THE ENCHANTED BUBBLES!</span>
+            <span class="med" style="color:#ffaadd">USE YOUR MAGIC WAND TO SAVE THE KINGDOM</span>
+            <span class="small">✨ TAP SCREEN OR PRESS ENTER ✨</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="gameOverOverlay" style="display:none;">
+        <div class="overlay-text">
+            <span class="big">💔 OH NO! 💔</span>
+            <span class="med" id="finalScore"></span>
+            <span class="small">✨ TAP OR PRESS ENTER ✨</span>
+        </div>
+    </div>
+
+    <div class="overlay" id="winOverlay" style="display:none;background:transparent;"></div>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+
+        // Pastel/magic palette
+        const BUBBLE_COLORS = [
+            { fill: '#ff6b9d', shine: '#ffb0cc', outline: '#cc4477' },  // pink
+            { fill: '#c56bff', shine: '#ddb0ff', outline: '#9040cc' },  // purple
+            { fill: '#6bc5ff', shine: '#b0dfff', outline: '#4090cc' },  // blue
+            { fill: '#6bffc5', shine: '#b0ffe0', outline: '#40cc90' },  // mint
+            { fill: '#ffdb6b', shine: '#ffe8a0', outline: '#ccaa40' },  // gold
+            { fill: '#ff9d6b', shine: '#ffc8a0', outline: '#cc7040' },  // peach
+            { fill: '#ff6bff', shine: '#ffb0ff', outline: '#cc40cc' },  // magenta
+            { fill: '#6bffff', shine: '#b0ffff', outline: '#40cccc' },  // cyan
+        ];
+
+        // ===== AUDIO =====
+        class SFX {
+            constructor() { this.ctx = null; }
+            init() {
+                if (this.ctx) return;
+                try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+            }
+            play(type) {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = () => this.ctx.createOscillator();
+                const gn = () => this.ctx.createGain();
+
+                if (type === 'wand') {
+                    // Magical sparkle shoot
+                    [0, 0.03, 0.06].forEach((delay, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(1200 + i * 200, t + delay);
+                        o.frequency.exponentialRampToValueAtTime(800 + i * 100, t + delay + 0.08);
+                        g.gain.setValueAtTime(0.05, t + delay);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + delay + 0.08);
+                        o.start(t + delay); o.stop(t + delay + 0.08);
+                    });
+                }
+                if (type === 'pop') {
+                    // Bubbly pop!
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(600 + Math.random() * 400, t);
+                    o.frequency.exponentialRampToValueAtTime(1800, t + 0.06);
+                    g.gain.setValueAtTime(0.12, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1);
+                    o.start(t); o.stop(t + 0.1);
+                    // Sparkle tail
+                    const o2 = osc(), g2 = gn();
+                    o2.type = 'triangle'; o2.connect(g2); g2.connect(this.ctx.destination);
+                    o2.frequency.setValueAtTime(2000, t + 0.05);
+                    o2.frequency.exponentialRampToValueAtTime(3000, t + 0.12);
+                    g2.gain.setValueAtTime(0.03, t + 0.05);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.12);
+                    o2.start(t + 0.05); o2.stop(t + 0.12);
+                }
+                if (type === 'damage') {
+                    const o = osc(), g = gn();
+                    o.type = 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(400, t);
+                    o.frequency.exponentialRampToValueAtTime(100, t + 0.3);
+                    g.gain.setValueAtTime(0.1, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.3);
+                    o.start(t); o.stop(t + 0.3);
+                }
+                if (type === 'gameover') {
+                    [350, 300, 250, 200, 150].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.25);
+                        g.gain.setValueAtTime(0.06, t + i * 0.25);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.25 + 0.24);
+                        o.start(t + i * 0.25); o.stop(t + i * 0.25 + 0.25);
+                    });
+                }
+                if (type === 'countdown') {
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(800, t);
+                    g.gain.setValueAtTime(0.05, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.08);
+                    o.start(t); o.stop(t + 0.08);
+                }
+                if (type === 'go') {
+                    // Sparkly go
+                    [1200, 1500, 1800].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.06);
+                        g.gain.setValueAtTime(0.05, t + i * 0.06);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.08);
+                        o.start(t + i * 0.06); o.stop(t + i * 0.06 + 0.08);
+                    });
+                }
+                if (type === 'victory') {
+                    const notes = [523, 659, 784, 880, 1047, 880, 1047, 1319];
+                    notes.forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.16);
+                        g.gain.setValueAtTime(0.06, t + i * 0.16);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.16 + 0.15);
+                        o.start(t + i * 0.16); o.stop(t + i * 0.16 + 0.16);
+                    });
+                }
+            }
+        }
+
+        const sfx = new SFX();
+        const MAX_WAVES = 9;
+        let W, H;
+        let state = 'start';
+        let score = 0, lives = 5, wave = 1;
+        let bubbles = [], popEffects = [], hearts = [], sparkles = [];
+        let crossX = 0.5, crossY = 0.4;
+        let keys = {};
+        let spawnTimer = 0, spawnInterval = 1200;
+        let popped = 0, waveTarget = 7;
+        let maxOnScreen = 5;
+        let lastTime = 0;
+        let wandAngle = 0;
+
+        // Background stars/sparkles
+        let bgSparkles = [];
+
+        // Floating flowers
+        let flowers = [];
+
+        // Countdown
+        let countdownPhase = 0, countdownTimer = 0;
+        const CD_DUR = [1200, 900, 700, 700, 700, 500];
+        const CD_TEXT = ['', 'GET READY', '3', '2', '1', 'GO!'];
+
+        let victoryTimer = 0;
+
+        function initBgSparkles() {
+            bgSparkles = [];
+            for (let i = 0; i < 80; i++) {
+                bgSparkles.push({
+                    x: Math.random(), y: Math.random(),
+                    size: 1 + Math.random() * 3,
+                    speed: 0.01 + Math.random() * 0.03,
+                    phase: Math.random() * Math.PI * 2,
+                    hue: Math.random() * 360,
+                });
+            }
+        }
+
+        function initFlowers() {
+            flowers = [];
+            for (let i = 0; i < 12; i++) {
+                flowers.push({
+                    x: Math.random(), y: 0.75 + Math.random() * 0.2,
+                    size: 0.5 + Math.random() * 0.8,
+                    type: Math.floor(Math.random() * 3),
+                    sway: Math.random() * Math.PI * 2,
+                });
+            }
+        }
+
+        function resize() {
+            W = canvas.width = window.innerWidth * 2;
+            H = canvas.height = window.innerHeight * 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+        initBgSparkles();
+        initFlowers();
+
+        // ===== DRAWING =====
+
+        function drawBackground(dt) {
+            // Gradient sky - magical twilight
+            const grad = ctx.createLinearGradient(0, 0, 0, H);
+            grad.addColorStop(0, '#0a0520');
+            grad.addColorStop(0.3, '#1a0a40');
+            grad.addColorStop(0.6, '#2a1060');
+            grad.addColorStop(0.85, '#3a1870');
+            grad.addColorStop(1, '#2a1050');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, W, H);
+
+            // Twinkling stars
+            bgSparkles.forEach(s => {
+                const twinkle = Math.sin(Date.now() * 0.003 + s.phase) * 0.5 + 0.5;
+                const alpha = 0.2 + twinkle * 0.6;
+                ctx.fillStyle = `hsla(${s.hue}, 80%, 80%, ${alpha})`;
+                const sz = s.size * twinkle + 0.5;
+
+                // Star shape for bigger ones
+                if (s.size > 2) {
+                    const x = s.x * W, y = s.y * H;
+                    ctx.beginPath();
+                    ctx.moveTo(x, y - sz * 2);
+                    ctx.lineTo(x + sz * 0.5, y - sz * 0.5);
+                    ctx.lineTo(x + sz * 2, y);
+                    ctx.lineTo(x + sz * 0.5, y + sz * 0.5);
+                    ctx.lineTo(x, y + sz * 2);
+                    ctx.lineTo(x - sz * 0.5, y + sz * 0.5);
+                    ctx.lineTo(x - sz * 2, y);
+                    ctx.lineTo(x - sz * 0.5, y - sz * 0.5);
+                    ctx.closePath();
+                    ctx.fill();
+                } else {
+                    ctx.beginPath();
+                    ctx.arc(s.x * W, s.y * H, sz, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+
+            // Ground - soft grass meadow
+            const groundY = H * 0.78;
+            const grassGrad = ctx.createLinearGradient(0, groundY, 0, H);
+            grassGrad.addColorStop(0, '#2a6830');
+            grassGrad.addColorStop(0.3, '#1a5020');
+            grassGrad.addColorStop(1, '#103818');
+            ctx.fillStyle = grassGrad;
+            ctx.beginPath();
+            // Gently rolling hills
+            ctx.moveTo(0, groundY);
+            for (let x = 0; x <= W; x += W / 20) {
+                const hillY = groundY + Math.sin(x * 0.003 + 1) * H * 0.015 + Math.sin(x * 0.007) * H * 0.008;
+                ctx.lineTo(x, hillY);
+            }
+            ctx.lineTo(W, H); ctx.lineTo(0, H);
+            ctx.closePath();
+            ctx.fill();
+
+            // Grass blades
+            ctx.strokeStyle = '#3a8838';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 60; i++) {
+                const gx = (Math.sin(i * 73.7) * 0.5 + 0.5) * W;
+                const gy = groundY + Math.sin(gx * 0.003 + 1) * H * 0.015 + Math.sin(gx * 0.007) * H * 0.008;
+                const sway = Math.sin(Date.now() * 0.002 + i) * 4;
+                ctx.beginPath();
+                ctx.moveTo(gx, gy);
+                ctx.quadraticCurveTo(gx + sway, gy - H * 0.02, gx + sway * 1.5, gy - H * 0.03);
+                ctx.stroke();
+            }
+
+            // Flowers on the ground
+            flowers.forEach(f => {
+                const fx = f.x * W;
+                const fy = (f.y) * H;
+                const fs = f.size * Math.min(W, H) * 0.008;
+                const sway = Math.sin(Date.now() * 0.002 + f.sway) * 2;
+
+                // Stem
+                ctx.strokeStyle = '#2a7028';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(fx, fy);
+                ctx.quadraticCurveTo(fx + sway, fy - fs * 3, fx + sway * 1.5, fy - fs * 5);
+                ctx.stroke();
+
+                const petalColors = ['#ff80b0', '#ffaa60', '#aa80ff', '#80d0ff', '#ffff80'];
+                const pc = petalColors[f.type % petalColors.length];
+                const px = fx + sway * 1.5, py = fy - fs * 5;
+
+                // Petals
+                ctx.fillStyle = pc;
+                for (let p = 0; p < 5; p++) {
+                    const a = (p / 5) * Math.PI * 2 + Date.now() * 0.0005;
+                    ctx.beginPath();
+                    ctx.ellipse(px + Math.cos(a) * fs * 1.2, py + Math.sin(a) * fs * 1.2,
+                        fs * 0.8, fs * 0.5, a, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                // Center
+                ctx.fillStyle = '#ffee60';
+                ctx.beginPath();
+                ctx.arc(px, py, fs * 0.6, 0, Math.PI * 2);
+                ctx.fill();
+            });
+        }
+
+        function drawPrincess(cx, cy, wAngle) {
+            const x = cx * W, y = cy * H;
+            const s = Math.min(W, H) * 0.04;
+
+            ctx.save();
+            ctx.translate(x, y);
+
+            // === BIG POOFY BALL GOWN ===
+            // Dress shadow underneath
+            ctx.fillStyle = '#aa3070';
+            ctx.beginPath();
+            ctx.ellipse(0, s * 2.8, s * 2.4, s * 0.6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main ball gown (huge poofy skirt)
+            const dressGrad = ctx.createRadialGradient(0, s * 1.8, s * 0.2, 0, s * 2.0, s * 2.6);
+            dressGrad.addColorStop(0, '#ffb0d0');
+            dressGrad.addColorStop(0.4, '#ff80b8');
+            dressGrad.addColorStop(0.8, '#f060a0');
+            dressGrad.addColorStop(1, '#d84890');
+            ctx.fillStyle = dressGrad;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.7, s * 0.7);
+            ctx.quadraticCurveTo(-s * 1.8, s * 1.2, -s * 2.3, s * 2.2);
+            ctx.quadraticCurveTo(-s * 2.4, s * 2.8, -s * 2.2, s * 3.0);
+            ctx.lineTo(s * 2.2, s * 3.0);
+            ctx.quadraticCurveTo(s * 2.4, s * 2.8, s * 2.3, s * 2.2);
+            ctx.quadraticCurveTo(s * 1.8, s * 1.2, s * 0.7, s * 0.7);
+            ctx.closePath();
+            ctx.fill();
+
+            // Overskirt panel (front lighter panel like Peach)
+            ctx.fillStyle = 'rgba(255,200,230,0.35)';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.5, s * 0.9);
+            ctx.quadraticCurveTo(-s * 0.9, s * 1.8, -s * 1.0, s * 3.0);
+            ctx.lineTo(s * 1.0, s * 3.0);
+            ctx.quadraticCurveTo(s * 0.9, s * 1.8, s * 0.5, s * 0.9);
+            ctx.closePath();
+            ctx.fill();
+
+            // Dress bottom scalloped trim (gold like Peach)
+            ctx.fillStyle = '#ffd040';
+            for (let i = 0; i < 14; i++) {
+                const angle = -0.45 + (i / 13) * 0.9;
+                const hx = Math.sin(angle) * s * 2.2;
+                const hy = s * 2.85 + Math.cos(angle) * s * 0.15;
+                ctx.beginPath();
+                ctx.arc(hx, hy, s * 0.18, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            // Gold trim line above scallops
+            ctx.strokeStyle = '#ffd040';
+            ctx.lineWidth = s * 0.06;
+            ctx.beginPath();
+            ctx.moveTo(-s * 2.2, s * 2.7);
+            ctx.quadraticCurveTo(0, s * 2.9, s * 2.2, s * 2.7);
+            ctx.stroke();
+
+            // Second gold trim higher up
+            ctx.strokeStyle = '#ffc830';
+            ctx.lineWidth = s * 0.04;
+            ctx.beginPath();
+            ctx.moveTo(-s * 1.9, s * 2.3);
+            ctx.quadraticCurveTo(0, s * 2.5, s * 1.9, s * 2.3);
+            ctx.stroke();
+
+            // === BODICE (fitted top) ===
+            const bodiceGrad = ctx.createLinearGradient(0, -s * 0.1, 0, s * 0.9);
+            bodiceGrad.addColorStop(0, '#ffb8d0');
+            bodiceGrad.addColorStop(1, '#ff80b0');
+            ctx.fillStyle = bodiceGrad;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.6, -s * 0.1);
+            ctx.lineTo(-s * 0.7, s * 0.7);
+            ctx.quadraticCurveTo(0, s * 0.9, s * 0.7, s * 0.7);
+            ctx.lineTo(s * 0.6, -s * 0.1);
+            ctx.closePath();
+            ctx.fill();
+
+            // Bodice center seam
+            ctx.strokeStyle = 'rgba(200,60,120,0.3)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(0, -s * 0.05);
+            ctx.lineTo(0, s * 0.8);
+            ctx.stroke();
+
+            // === PUFFY SHOULDERS (signature Peach) ===
+            // Left puff
+            const puffGrad1 = ctx.createRadialGradient(-s * 0.75, s * 0.05, 0, -s * 0.75, s * 0.05, s * 0.35);
+            puffGrad1.addColorStop(0, '#ffc8e0');
+            puffGrad1.addColorStop(1, '#ff80b0');
+            ctx.fillStyle = puffGrad1;
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.72, s * 0.05, s * 0.32, s * 0.28, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#e870a0';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Right puff
+            const puffGrad2 = ctx.createRadialGradient(s * 0.75, s * 0.05, 0, s * 0.75, s * 0.05, s * 0.35);
+            puffGrad2.addColorStop(0, '#ffc8e0');
+            puffGrad2.addColorStop(1, '#ff80b0');
+            ctx.fillStyle = puffGrad2;
+            ctx.beginPath();
+            ctx.ellipse(s * 0.72, s * 0.05, s * 0.32, s * 0.28, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.strokeStyle = '#e870a0';
+            ctx.stroke();
+
+            // === BROOCH (blue jewel like Peach's) ===
+            ctx.fillStyle = '#3080dd';
+            ctx.shadowColor = '#60a0ff';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.ellipse(0, s * 0.15, s * 0.14, s * 0.12, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            // Brooch gold setting
+            ctx.strokeStyle = '#ffd040';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.ellipse(0, s * 0.15, s * 0.16, s * 0.14, 0, 0, Math.PI * 2);
+            ctx.stroke();
+            // Brooch shine
+            ctx.fillStyle = 'rgba(180,220,255,0.6)';
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.04, s * 0.1, s * 0.06, s * 0.03, -0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === GLOVES (white long gloves like Peach) ===
+            // Left glove (behind dress for non-wand arm)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.65, s * 0.25);
+            ctx.quadraticCurveTo(-s * 0.85, s * 0.6, -s * 0.75, s * 0.9);
+            ctx.lineTo(-s * 0.6, s * 0.9);
+            ctx.quadraticCurveTo(-s * 0.7, s * 0.6, -s * 0.52, s * 0.25);
+            ctx.closePath();
+            ctx.fill();
+
+            // Dress sparkles
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            [[-0.8, 1.8], [0.5, 2.2], [-1.2, 2.5], [0.9, 1.6], [0, 2.6], [-1.4, 2.2], [1.2, 2.0], [-0.3, 1.9], [0.7, 2.7]].forEach(([px, py]) => {
+                const twinkle = Math.sin(Date.now() * 0.005 + px * 10 + py * 7) * 0.5 + 0.5;
+                ctx.globalAlpha = twinkle * 0.6;
+                const sx = px * s, sy = py * s, sr = s * 0.06;
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - sr * 2);
+                ctx.lineTo(sx + sr * 0.4, sy - sr * 0.4);
+                ctx.lineTo(sx + sr * 2, sy);
+                ctx.lineTo(sx + sr * 0.4, sy + sr * 0.4);
+                ctx.lineTo(sx, sy + sr * 2);
+                ctx.lineTo(sx - sr * 0.4, sy + sr * 0.4);
+                ctx.lineTo(sx - sr * 2, sy);
+                ctx.lineTo(sx - sr * 0.4, sy - sr * 0.4);
+                ctx.closePath();
+                ctx.fill();
+            });
+            ctx.globalAlpha = 1;
+
+            // === NECK ===
+            ctx.fillStyle = '#ffd8c0';
+            ctx.fillRect(-s * 0.14, -s * 0.15, s * 0.28, s * 0.2);
+
+            // === HEAD ===
+            // Hair back volume (big Peach hair)
+            ctx.fillStyle = '#f0c840';
+            ctx.beginPath();
+            ctx.ellipse(0, -s * 0.65, s * 0.78, s * 0.75, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Hair side volume (Peach's signature big swoopy hair)
+            ctx.fillStyle = '#e8b830';
+            // Left big swoop
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.65, -s * 0.35);
+            ctx.quadraticCurveTo(-s * 1.1, s * 0.0, -s * 1.0, s * 0.6);
+            ctx.quadraticCurveTo(-s * 0.95, s * 1.0, -s * 0.85, s * 1.5);
+            ctx.quadraticCurveTo(-s * 0.7, s * 1.3, -s * 0.6, s * 0.5);
+            ctx.quadraticCurveTo(-s * 0.5, s * 0.0, -s * 0.5, -s * 0.35);
+            ctx.closePath();
+            ctx.fill();
+            // Right big swoop
+            ctx.beginPath();
+            ctx.moveTo(s * 0.65, -s * 0.35);
+            ctx.quadraticCurveTo(s * 1.1, s * 0.0, s * 1.0, s * 0.6);
+            ctx.quadraticCurveTo(s * 0.95, s * 1.0, s * 0.85, s * 1.5);
+            ctx.quadraticCurveTo(s * 0.7, s * 1.3, s * 0.6, s * 0.5);
+            ctx.quadraticCurveTo(s * 0.5, s * 0.0, s * 0.5, -s * 0.35);
+            ctx.closePath();
+            ctx.fill();
+
+            // Hair highlight streaks
+            ctx.strokeStyle = 'rgba(255,220,100,0.4)';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.3, -s * 1.1);
+            ctx.quadraticCurveTo(-s * 0.5, -s * 0.5, -s * 0.7, s * 0.3);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(s * 0.2, -s * 1.1);
+            ctx.quadraticCurveTo(s * 0.4, -s * 0.5, s * 0.65, s * 0.3);
+            ctx.stroke();
+
+            // Face
+            ctx.fillStyle = '#ffe0c8';
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.6, s * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eyes (big Peach-style)
+            // Eye whites
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.17, -s * 0.65, s * 0.12, s * 0.14, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(s * 0.17, -s * 0.65, s * 0.12, s * 0.14, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Irises (big blue like Peach)
+            ctx.fillStyle = '#4090dd';
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.17, -s * 0.63, s * 0.09, s * 0.11, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(s * 0.17, -s * 0.63, s * 0.09, s * 0.11, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Pupils
+            ctx.fillStyle = '#1a3060';
+            ctx.beginPath();
+            ctx.arc(-s * 0.17, -s * 0.61, s * 0.05, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.arc(s * 0.17, -s * 0.61, s * 0.05, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Eye shines (two per eye like anime/Peach)
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(-s * 0.2, -s * 0.68, s * 0.035, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(-s * 0.14, -s * 0.58, s * 0.02, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.14, -s * 0.68, s * 0.035, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.20, -s * 0.58, s * 0.02, 0, Math.PI * 2); ctx.fill();
+
+            // Eyelashes (thick Peach lashes)
+            ctx.strokeStyle = '#443322';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.29, -s * 0.72);
+            ctx.quadraticCurveTo(-s * 0.32, -s * 0.80, -s * 0.30, -s * 0.84);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.22, -s * 0.78);
+            ctx.lineTo(-s * 0.24, -s * 0.86);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(s * 0.29, -s * 0.72);
+            ctx.quadraticCurveTo(s * 0.32, -s * 0.80, s * 0.30, -s * 0.84);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(s * 0.22, -s * 0.78);
+            ctx.lineTo(s * 0.24, -s * 0.86);
+            ctx.stroke();
+
+            // Eyebrows
+            ctx.strokeStyle = '#c09030';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(-s * 0.17, -s * 0.82, s * 0.1, Math.PI + 0.3, -0.3);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.arc(s * 0.17, -s * 0.82, s * 0.1, Math.PI + 0.3, -0.3);
+            ctx.stroke();
+
+            // Blush
+            ctx.fillStyle = 'rgba(255,110,130,0.25)';
+            ctx.beginPath(); ctx.ellipse(-s * 0.28, -s * 0.48, s * 0.1, s * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(s * 0.28, -s * 0.48, s * 0.1, s * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Nose (tiny)
+            ctx.fillStyle = 'rgba(220,170,140,0.5)';
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.52, s * 0.03, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Smile
+            ctx.strokeStyle = '#cc7766';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.arc(0, -s * 0.42, s * 0.12, 0.15, Math.PI - 0.15);
+            ctx.stroke();
+
+            // Hair bangs (Peach-style parted bangs with swoops)
+            ctx.fillStyle = '#f0c840';
+            // Left bang swoop
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.5, -s * 0.8);
+            ctx.quadraticCurveTo(-s * 0.45, -s * 1.25, -s * 0.1, -s * 1.2);
+            ctx.quadraticCurveTo(-s * 0.05, -s * 1.0, -s * 0.15, -s * 0.75);
+            ctx.quadraticCurveTo(-s * 0.3, -s * 0.65, -s * 0.5, -s * 0.8);
+            ctx.closePath();
+            ctx.fill();
+            // Right bang swoop
+            ctx.beginPath();
+            ctx.moveTo(s * 0.5, -s * 0.8);
+            ctx.quadraticCurveTo(s * 0.45, -s * 1.25, s * 0.1, -s * 1.2);
+            ctx.quadraticCurveTo(s * 0.05, -s * 1.0, s * 0.15, -s * 0.75);
+            ctx.quadraticCurveTo(s * 0.3, -s * 0.65, s * 0.5, -s * 0.8);
+            ctx.closePath();
+            ctx.fill();
+
+            // Bang highlights
+            ctx.fillStyle = 'rgba(255,220,100,0.3)';
+            ctx.beginPath();
+            ctx.ellipse(-s * 0.3, -s * 1.0, s * 0.08, s * 0.15, 0.2, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(s * 0.3, -s * 1.0, s * 0.08, s * 0.15, -0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // === CROWN (Peach's big gold crown) ===
+            ctx.fillStyle = '#ffd700';
+            ctx.shadowColor = '#ffd700';
+            ctx.shadowBlur = 8;
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.4, -s * 1.15);
+            ctx.lineTo(-s * 0.42, -s * 1.55);
+            ctx.lineTo(-s * 0.28, -s * 1.35);
+            ctx.lineTo(-s * 0.12, -s * 1.6);
+            ctx.lineTo(0, -s * 1.4);
+            ctx.lineTo(s * 0.12, -s * 1.6);
+            ctx.lineTo(s * 0.28, -s * 1.35);
+            ctx.lineTo(s * 0.42, -s * 1.55);
+            ctx.lineTo(s * 0.4, -s * 1.15);
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+            // Crown base band
+            ctx.fillStyle = '#eec020';
+            ctx.fillRect(-s * 0.42, -s * 1.18, s * 0.84, s * 0.1);
+            ctx.strokeStyle = '#cc9900';
+            ctx.lineWidth = 1.5;
+            ctx.strokeRect(-s * 0.42, -s * 1.18, s * 0.84, s * 0.1);
+
+            // Crown jewels (red center, blue sides like Peach)
+            ctx.fillStyle = '#ff2060';
+            ctx.beginPath(); ctx.ellipse(0, -s * 1.45, s * 0.07, s * 0.08, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#3080ee';
+            ctx.beginPath(); ctx.ellipse(-s * 0.28, -s * 1.35, s * 0.05, s * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(s * 0.28, -s * 1.35, s * 0.05, s * 0.06, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = '#40cc60';
+            ctx.beginPath(); ctx.ellipse(-s * 0.14, -s * 1.5, s * 0.04, s * 0.045, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.ellipse(s * 0.14, -s * 1.5, s * 0.04, s * 0.045, 0, 0, Math.PI * 2); ctx.fill();
+
+            // Earrings (Peach's blue earrings)
+            ctx.fillStyle = '#3080dd';
+            ctx.beginPath(); ctx.arc(-s * 0.42, -s * 0.45, s * 0.05, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.42, -s * 0.45, s * 0.05, 0, Math.PI * 2); ctx.fill();
+            ctx.fillStyle = 'rgba(180,220,255,0.5)';
+            ctx.beginPath(); ctx.arc(-s * 0.43, -s * 0.47, s * 0.02, 0, Math.PI * 2); ctx.fill();
+            ctx.beginPath(); ctx.arc(s * 0.41, -s * 0.47, s * 0.02, 0, Math.PI * 2); ctx.fill();
+
+            // === WAND ARM (right side, white glove, pointing UP) ===
+            ctx.save();
+            ctx.translate(s * 0.6, s * 0.0);
+            ctx.rotate(-Math.PI + wAngle);
+
+            // White glove arm
+            ctx.fillStyle = '#fff';
+            ctx.beginPath();
+            ctx.moveTo(-s * 0.08, 0);
+            ctx.lineTo(-s * 0.1, s * 0.9);
+            ctx.quadraticCurveTo(-s * 0.08, s * 1.0, 0, s * 1.0);
+            ctx.quadraticCurveTo(s * 0.08, s * 1.0, s * 0.1, s * 0.9);
+            ctx.lineTo(s * 0.08, 0);
+            ctx.closePath();
+            ctx.fill();
+
+            // Glove cuff
+            ctx.fillStyle = '#f0e8ff';
+            ctx.beginPath();
+            ctx.ellipse(0, s * 0.05, s * 0.14, s * 0.08, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Wand
+            ctx.fillStyle = '#f0d0ff';
+            ctx.fillRect(-s * 0.035, s * 0.6, s * 0.07, s * 1.6);
+            ctx.fillStyle = '#d0a0e0';
+            ctx.fillRect(-s * 0.025, s * 0.6, s * 0.02, s * 1.6);
+            // Wand gold ring
+            ctx.fillStyle = '#ffd040';
+            ctx.fillRect(-s * 0.05, s * 0.6, s * 0.1, s * 0.08);
+
+            // Star on wand tip
+            const starTipY = s * 2.2;
+            const starR = s * 0.25;
+            ctx.fillStyle = '#ffe040';
+            ctx.shadowColor = '#ffe040';
+            ctx.shadowBlur = 12;
+            ctx.beginPath();
+            for (let i = 0; i < 5; i++) {
+                const a = -Math.PI / 2 + (i * 2 * Math.PI / 5);
+                const a2 = a + Math.PI / 5;
+                if (i === 0) ctx.moveTo(Math.cos(a) * starR, starTipY + Math.sin(a) * starR);
+                else ctx.lineTo(Math.cos(a) * starR, starTipY + Math.sin(a) * starR);
+                ctx.lineTo(Math.cos(a2) * starR * 0.4, starTipY + Math.sin(a2) * starR * 0.4);
+            }
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Wand sparkles
+            const sparkAlpha = Math.sin(Date.now() * 0.01) * 0.3 + 0.7;
+            ctx.fillStyle = `rgba(255,255,200,${sparkAlpha})`;
+            [[-0.18, 2.0], [0.2, 2.35], [-0.12, 2.45], [0.14, 2.1]].forEach(([px, py]) => {
+                ctx.beginPath();
+                ctx.arc(px * s, py * s, s * 0.04, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore(); // wand arm
+
+            ctx.restore(); // main transform
+        }
+
+        function drawBubble(b) {
+            const x = b.x * W, y = b.y * H;
+            const r = b.size * Math.min(W, H) * 0.03;
+            const col = BUBBLE_COLORS[b.colorIdx];
+
+            // Outer glow
+            const glowGrad = ctx.createRadialGradient(x, y, r * 0.5, x, y, r * 1.3);
+            glowGrad.addColorStop(0, 'transparent');
+            glowGrad.addColorStop(0.8, `${col.fill}22`);
+            glowGrad.addColorStop(1, 'transparent');
+            ctx.fillStyle = glowGrad;
+            ctx.beginPath();
+            ctx.arc(x, y, r * 1.3, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main bubble body
+            const bodyGrad = ctx.createRadialGradient(x - r * 0.25, y - r * 0.25, r * 0.1, x, y, r);
+            bodyGrad.addColorStop(0, col.shine);
+            bodyGrad.addColorStop(0.5, col.fill);
+            bodyGrad.addColorStop(1, col.outline);
+            ctx.fillStyle = bodyGrad;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Glass shine highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.5)';
+            ctx.beginPath();
+            ctx.ellipse(x - r * 0.25, y - r * 0.3, r * 0.35, r * 0.2, -0.4, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Small sparkle
+            ctx.fillStyle = 'rgba(255,255,255,0.7)';
+            ctx.beginPath();
+            ctx.arc(x - r * 0.15, y - r * 0.45, r * 0.08, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Outline
+            ctx.strokeStyle = col.outline;
+            ctx.lineWidth = 2;
+            ctx.globalAlpha = 0.5;
+            ctx.beginPath();
+            ctx.arc(x, y, r, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+
+            // Inner swirl (if flash/about to shoot)
+            if (b.flash > 80) {
+                ctx.strokeStyle = `rgba(255,255,255,0.4)`;
+                ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.arc(x, y, r * 0.6, 0, Math.PI * 1.2);
+                ctx.stroke();
+            }
+        }
+
+        function drawHeart(h) {
+            const x = h.x * W, y = h.y * H;
+            const angle = Math.atan2(h.vy, h.vx);
+            const s = Math.min(W, H) * 0.015;
+
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(angle - Math.PI / 2);
+
+            // Glow
+            const glow = ctx.createRadialGradient(0, 0, 0, 0, 0, s * 2);
+            glow.addColorStop(0, 'rgba(255,100,180,0.5)');
+            glow.addColorStop(1, 'transparent');
+            ctx.fillStyle = glow;
+            ctx.beginPath();
+            ctx.arc(0, 0, s * 2, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Heart shape
+            ctx.fillStyle = '#ff5090';
+            ctx.shadowColor = '#ff80b0';
+            ctx.shadowBlur = 6;
+            ctx.beginPath();
+            ctx.moveTo(0, s * 0.6);
+            ctx.bezierCurveTo(-s * 0.8, -s * 0.2, -s * 1.2, -s * 1.0, 0, -s * 0.4);
+            ctx.bezierCurveTo(s * 1.2, -s * 1.0, s * 0.8, -s * 0.2, 0, s * 0.6);
+            ctx.closePath();
+            ctx.fill();
+            ctx.shadowBlur = 0;
+
+            // Sparkle trail
+            ctx.fillStyle = 'rgba(255,200,240,0.6)';
+            ctx.beginPath();
+            ctx.arc(0, s * 1.2, s * 0.3, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,220,250,0.4)';
+            ctx.beginPath();
+            ctx.arc(s * 0.3, s * 1.8, s * 0.2, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawPopEffect(p) {
+            const x = p.x * W, y = p.y * H;
+            const prog = p.progress;
+            const col = BUBBLE_COLORS[p.colorIdx];
+            const maxR = Math.min(W, H) * 0.06;
+
+            // Expanding colored ring
+            for (let i = 0; i < 2; i++) {
+                const rp = Math.min(1, prog + i * 0.1);
+                const ringR = maxR * rp;
+                const alpha = Math.max(0, 1 - rp * 1.3);
+                ctx.strokeStyle = i === 0 ? col.fill : col.shine;
+                ctx.globalAlpha = alpha;
+                ctx.lineWidth = 3 - i;
+                ctx.beginPath();
+                ctx.arc(x, y, ringR, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Star burst
+            for (let i = 0; i < 8; i++) {
+                const a = (i / 8) * Math.PI * 2 + prog * 4;
+                const dist = maxR * prog * 0.8;
+                const alpha = Math.max(0, 1 - prog * 1.5);
+                ctx.fillStyle = i % 2 === 0 ? col.fill : '#fff';
+                ctx.globalAlpha = alpha;
+                const sx = x + Math.cos(a) * dist;
+                const sy = y + Math.sin(a) * dist;
+                // Tiny star
+                const ts = maxR * 0.08 * (1 - prog);
+                ctx.beginPath();
+                ctx.moveTo(sx, sy - ts * 2);
+                ctx.lineTo(sx + ts * 0.4, sy - ts * 0.4);
+                ctx.lineTo(sx + ts * 2, sy);
+                ctx.lineTo(sx + ts * 0.4, sy + ts * 0.4);
+                ctx.lineTo(sx, sy + ts * 2);
+                ctx.lineTo(sx - ts * 0.4, sy + ts * 0.4);
+                ctx.lineTo(sx - ts * 2, sy);
+                ctx.lineTo(sx - ts * 0.4, sy - ts * 0.4);
+                ctx.closePath();
+                ctx.fill();
+            }
+
+            // Central flash
+            if (prog < 0.25) {
+                const fa = 1 - prog / 0.25;
+                ctx.globalAlpha = fa;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath();
+                ctx.arc(x, y, maxR * 0.3 * (1 - prog), 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            ctx.globalAlpha = 1;
+        }
+
+        function drawCrosshair() {
+            const x = crossX * W, y = crossY * H;
+            const r = Math.min(W, H) * 0.02;
+            const t = Date.now() * 0.003;
+
+            // Rotating star crosshair
+            ctx.strokeStyle = 'rgba(255,200,255,0.5)';
+            ctx.lineWidth = 1.5;
+            ctx.save();
+            ctx.translate(x, y);
+            ctx.rotate(t);
+            ctx.beginPath();
+            for (let i = 0; i < 4; i++) {
+                const a = (i / 4) * Math.PI * 2;
+                ctx.moveTo(Math.cos(a) * r * 0.3, Math.sin(a) * r * 0.3);
+                ctx.lineTo(Math.cos(a) * r * 1.3, Math.sin(a) * r * 1.3);
+            }
+            ctx.stroke();
+            ctx.restore();
+
+            // Inner diamond
+            ctx.strokeStyle = 'rgba(255,150,220,0.6)';
+            ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(x, y - r * 0.7);
+            ctx.lineTo(x + r * 0.7, y);
+            ctx.lineTo(x, y + r * 0.7);
+            ctx.lineTo(x - r * 0.7, y);
+            ctx.closePath();
+            ctx.stroke();
+
+            // Center dot
+            ctx.fillStyle = 'rgba(255,180,240,0.8)';
+            ctx.beginPath();
+            ctx.arc(x, y, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        function drawSparkle(p) {
+            const x = p.x * W, y = p.y * H;
+            const sz = p.rad * Math.min(W, H);
+            ctx.fillStyle = `rgba(${p.r2 || 255},${p.g2 || 200},${p.b2 || 255},${p.alpha})`;
+
+            // Star shape
+            ctx.beginPath();
+            ctx.moveTo(x, y - sz * 2);
+            ctx.lineTo(x + sz * 0.3, y - sz * 0.3);
+            ctx.lineTo(x + sz * 2, y);
+            ctx.lineTo(x + sz * 0.3, y + sz * 0.3);
+            ctx.lineTo(x, y + sz * 2);
+            ctx.lineTo(x - sz * 0.3, y + sz * 0.3);
+            ctx.lineTo(x - sz * 2, y);
+            ctx.lineTo(x - sz * 0.3, y - sz * 0.3);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // ===== COUNTDOWN =====
+        function drawCountdown() {
+            const cx = W / 2, cy = H / 2;
+            ctx.fillStyle = '#ffc0e8';
+            ctx.font = `${Math.min(W, H) * 0.022}px 'Press Start 2P'`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.shadowColor = 'rgba(255,150,220,0.5)'; ctx.shadowBlur = 10;
+            ctx.fillText('WAVE ' + wave + ' OF ' + MAX_WAVES, cx, cy - Math.min(W, H) * 0.08);
+
+            const text = CD_TEXT[countdownPhase];
+            if (text) {
+                const isNum = ['3', '2', '1'].includes(text);
+                const isGo = text === 'GO!';
+                const fontSize = isNum ? 0.1 : (isGo ? 0.06 : 0.022);
+                const phase = countdownTimer / CD_DUR[countdownPhase];
+                const scale = isNum ? 1 + Math.sin(phase * Math.PI) * 0.15 : 1;
+                const alpha = isGo ? Math.max(0, 1 - phase * 2) : 1;
+
+                ctx.save();
+                ctx.translate(cx, cy + Math.min(W, H) * 0.02);
+                ctx.scale(scale, scale);
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = isGo ? '#ff80d0' : '#c8a0ff';
+                ctx.font = `${Math.min(W, H) * fontSize}px 'Press Start 2P'`;
+                ctx.fillText(text, 0, 0);
+                ctx.restore();
+                ctx.globalAlpha = 1;
+            }
+            ctx.shadowBlur = 0;
+        }
+
+        // ===== VICTORY =====
+        function drawVictory(dt) {
+            victoryTimer += dt;
+            const cx = W / 2, cy = H * 0.35;
+            const t = victoryTimer;
+            const s = Math.min(W, H);
+
+            // Big sparkle explosion
+            if (t < 3) {
+                for (let i = 0; i < 20; i++) {
+                    const a = (i / 20) * Math.PI * 2 + t * 2;
+                    const dist = s * 0.05 + s * 0.2 * Math.min(1, t * 0.5);
+                    const alpha = Math.max(0, 1 - t * 0.3);
+                    const hue = (i * 36 + t * 60) % 360;
+                    ctx.fillStyle = `hsla(${hue}, 90%, 75%, ${alpha})`;
+                    const sx = cx + Math.cos(a) * dist;
+                    const sy = cy + Math.sin(a) * dist;
+                    const r = s * 0.015;
+                    ctx.beginPath();
+                    ctx.moveTo(sx, sy - r);
+                    ctx.lineTo(sx + r * 0.3, sy - r * 0.3);
+                    ctx.lineTo(sx + r, sy);
+                    ctx.lineTo(sx + r * 0.3, sy + r * 0.3);
+                    ctx.lineTo(sx, sy + r);
+                    ctx.lineTo(sx - r * 0.3, sy + r * 0.3);
+                    ctx.lineTo(sx - r, sy);
+                    ctx.lineTo(sx - r * 0.3, sy - r * 0.3);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+            }
+
+            // Floating crown
+            if (t > 1) {
+                const crownY = cy + Math.sin(t * 2) * s * 0.01;
+                const crownS = s * 0.06 * Math.min(1, (t - 1) * 0.5);
+                ctx.fillStyle = '#ffd700';
+                ctx.shadowColor = '#ffd700';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.moveTo(cx - crownS, crownY);
+                ctx.lineTo(cx - crownS, crownY - crownS * 0.8);
+                ctx.lineTo(cx - crownS * 0.5, crownY - crownS * 0.5);
+                ctx.lineTo(cx, crownY - crownS);
+                ctx.lineTo(cx + crownS * 0.5, crownY - crownS * 0.5);
+                ctx.lineTo(cx + crownS, crownY - crownS * 0.8);
+                ctx.lineTo(cx + crownS, crownY);
+                ctx.closePath();
+                ctx.fill();
+                ctx.shadowBlur = 0;
+
+                // Jewels
+                ctx.fillStyle = '#ff3080';
+                ctx.beginPath(); ctx.arc(cx, crownY - crownS * 0.8, crownS * 0.12, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#40c0ff';
+                ctx.beginPath(); ctx.arc(cx - crownS * 0.6, crownY - crownS * 0.55, crownS * 0.08, 0, Math.PI * 2); ctx.fill();
+                ctx.beginPath(); ctx.arc(cx + crownS * 0.6, crownY - crownS * 0.55, crownS * 0.08, 0, Math.PI * 2); ctx.fill();
+            }
+
+            if (t > 2) {
+                const ta = Math.min(1, (t - 2) / 1);
+                ctx.globalAlpha = ta;
+                ctx.shadowColor = 'rgba(255,150,220,0.6)'; ctx.shadowBlur = 15;
+
+                const pulse = 1 + Math.sin(t * 4) * 0.04;
+                ctx.save();
+                ctx.translate(cx, cy + s * 0.15);
+                ctx.scale(pulse, pulse);
+                ctx.fillStyle = '#ffaadd';
+                ctx.font = `${s * 0.038}px 'Press Start 2P'`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('YOU DID IT!', 0, 0);
+                ctx.restore();
+
+                ctx.shadowBlur = 0;
+                ctx.fillStyle = '#c8a0ff';
+                ctx.font = `${s * 0.018}px 'Press Start 2P'`;
+                ctx.textAlign = 'center';
+                ctx.fillText('ALL BUBBLES DEFEATED', cx, cy + s * 0.22);
+                ctx.fillText('THE KINGDOM IS SAFE!', cx, cy + s * 0.26);
+
+                ctx.fillStyle = '#ffc0e8';
+                ctx.font = `${s * 0.016}px 'Press Start 2P'`;
+                ctx.fillText('SCORE: ' + String(score).padStart(5, '0'), cx, cy + s * 0.32);
+
+                ctx.fillStyle = '#ffe080';
+                ctx.font = `${s * 0.012}px 'Press Start 2P'`;
+                ctx.fillText('MAGICAL PRINCESS POWER!', cx, cy + s * 0.37);
+
+                if (t > 3.5 && Math.floor(t * 2) % 2 === 0) {
+                    ctx.fillStyle = '#ffc0e8';
+                    ctx.font = `${s * 0.011}px 'Press Start 2P'`;
+                    ctx.fillText('TAP OR PRESS ENTER TO PLAY AGAIN', cx, cy + s * 0.43);
+                }
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // ===== LOGIC =====
+        function getWaveConfig(w) {
+            return {
+                target: 5 + w * 2,
+                spawnInt: Math.max(1100 - w * 90, 350),
+                maxOn: Math.min(4 + w, 14),
+            };
+        }
+
+        function spawnBubble() {
+            const size = 0.7 + Math.random() * 0.6;
+            const x = 0.15 + Math.random() * 0.7;
+            const colorIdx = Math.floor(Math.random() * BUBBLE_COLORS.length);
+
+            // Aim toward princess with spread
+            const dx = 0.5 - x + (Math.random() - 0.5) * 0.4;
+            const dy = 0.85 - (-0.02);
+            const d = Math.sqrt(dx * dx + dy * dy);
+            const speed = 0.08 + Math.random() * 0.06 + wave * 0.012;
+
+            bubbles.push({
+                x: x, y: -0.04,
+                vx: (dx / d) * speed * (0.3 + Math.random() * 0.7),
+                vy: (dy / d) * speed,
+                size, colorIdx,
+                alive: true, t: 0,
+                wobble: Math.random() * Math.PI * 2,
+                wobbleSpeed: 1 + Math.random() * 2,
+                wobbleAmp: 0.01 + Math.random() * 0.02,
+                flash: 0,
+            });
+        }
+
+        function shoot() {
+            if (state !== 'playing') return;
+            sfx.play('wand');
+
+            let closest = null, closestDist = Infinity;
+            for (let b of bubbles) {
+                if (!b.alive) continue;
+                const dx = crossX - b.x, dy = crossY - b.y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                if (dist < 0.12 && dist < closestDist) { closest = b; closestDist = dist; }
+            }
+
+            const aimX = closest ? closest.x : crossX;
+            const aimY = closest ? closest.y : crossY;
+
+            // Fire heart from wand
+            const startX = 0.5 + 0.03, startY = 0.83;
+            const dx = aimX - startX, dy = aimY - startY;
+            const d = Math.sqrt(dx * dx + dy * dy) || 0.001;
+            const speed = 2.0;
+            hearts.push({ x: startX, y: startY, vx: (dx / d) * speed, vy: (dy / d) * speed });
+
+            if (closest) {
+                closest.alive = false;
+                score += 100 * wave; popped++;
+                sfx.play('pop');
+                popEffects.push({ x: closest.x, y: closest.y, progress: 0, colorIdx: closest.colorIdx });
+
+                // Sparkle burst
+                for (let i = 0; i < 12; i++) {
+                    const hue = BUBBLE_COLORS[closest.colorIdx];
+                    const rgb = hexToRgb(hue.fill);
+                    sparkles.push({
+                        x: closest.x, y: closest.y,
+                        vx: (Math.random() - 0.5) * 0.4, vy: (Math.random() - 0.5) * 0.4,
+                        rad: 0.003 + Math.random() * 0.005,
+                        alpha: 1, life: 0.5 + Math.random() * 0.4,
+                        r2: rgb.r, g2: rgb.g, b2: rgb.b,
+                    });
+                }
+                // White sparkles
+                for (let i = 0; i < 6; i++) {
+                    sparkles.push({
+                        x: closest.x, y: closest.y,
+                        vx: (Math.random() - 0.5) * 0.3, vy: (Math.random() - 0.5) * 0.3,
+                        rad: 0.002 + Math.random() * 0.003,
+                        alpha: 1, life: 0.3 + Math.random() * 0.3,
+                        r2: 255, g2: 255, b2: 255,
+                    });
+                }
+
+                document.getElementById('hitFlashPop').classList.add('active');
+                setTimeout(() => document.getElementById('hitFlashPop').classList.remove('active'), 60);
+            }
+            updateHUD();
+        }
+
+        function hexToRgb(hex) {
+            const r = parseInt(hex.slice(1, 3), 16);
+            const g = parseInt(hex.slice(3, 5), 16);
+            const b = parseInt(hex.slice(5, 7), 16);
+            return { r, g, b };
+        }
+
+        function takeDamage() {
+            lives--; sfx.play('damage'); updateHUD();
+            document.getElementById('hitFlashDmg').classList.add('active');
+            setTimeout(() => document.getElementById('hitFlashDmg').classList.remove('active'), 120);
+
+            if (lives <= 0) {
+                state = 'gameover'; sfx.play('gameover');
+                document.getElementById('finalScore').textContent = 'SCORE: ' + String(score).padStart(5, '0');
+                document.getElementById('gameOverOverlay').style.display = 'flex';
+            }
+        }
+
+        function startCountdown() {
+            state = 'countdown'; countdownPhase = 0; countdownTimer = 0;
+            bubbles = []; popEffects = []; hearts = []; sparkles = [];
+            const cfg = getWaveConfig(wave);
+            waveTarget = cfg.target; spawnInterval = cfg.spawnInt; maxOnScreen = cfg.maxOn;
+            popped = 0; spawnTimer = 0;
+        }
+
+        function nextWave() {
+            if (wave >= MAX_WAVES) {
+                state = 'victory'; victoryTimer = 0; sfx.play('victory');
+                document.getElementById('winOverlay').style.display = 'flex';
+                return;
+            }
+            wave++; updateHUD(); startCountdown();
+        }
+
+        function updateHUD() {
+            document.getElementById('hudScore').textContent = String(score).padStart(5, '0');
+            document.getElementById('hudWave').textContent = wave + '/' + MAX_WAVES;
+            const el = document.getElementById('hudLives');
+            el.innerHTML = '';
+            for (let i = 0; i < lives; i++) {
+                const s = document.createElement('span');
+                s.textContent = '♥'; s.style.fontSize = '14px'; s.style.color = '#ff80b0';
+                s.style.textShadow = '0 0 4px rgba(255,100,180,0.6)';
+                el.appendChild(s);
+            }
+        }
+
+        function updateCountdown(dt) {
+            countdownTimer += dt * 1000;
+            if (countdownTimer >= CD_DUR[countdownPhase]) {
+                countdownTimer = 0; countdownPhase++;
+                if (countdownPhase >= 2 && countdownPhase <= 4) sfx.play('countdown');
+                if (countdownPhase === 5) sfx.play('go');
+                if (countdownPhase >= CD_DUR.length) { state = 'playing'; return; }
+            }
+        }
+
+        function update(dt) {
+            if (state === 'countdown') { updateCountdown(dt); return; }
+            if (state !== 'playing') return;
+
+            const cs = 0.5;
+            if (keys['ArrowLeft'] || keys['a']) crossX -= cs * dt;
+            if (keys['ArrowRight'] || keys['d']) crossX += cs * dt;
+            if (keys['ArrowUp'] || keys['w']) crossY -= cs * dt;
+            if (keys['ArrowDown'] || keys['s']) crossY += cs * dt;
+            crossX = Math.max(0.0, Math.min(1.0, crossX));
+            crossY = Math.max(0.0, Math.min(0.8, crossY));
+
+            spawnTimer += dt * 1000;
+            if (spawnTimer >= spawnInterval && bubbles.filter(b => b.alive).length < maxOnScreen) {
+                spawnBubble(); spawnTimer = 0;
+            }
+
+            bubbles.forEach(b => {
+                if (!b.alive) return;
+                b.t += dt;
+                // Wobble sideways as they descend
+                b.x += b.vx * dt + Math.sin(b.t * b.wobbleSpeed + b.wobble) * b.wobbleAmp * dt;
+                b.y += b.vy * dt;
+                b.x = Math.max(0.05, Math.min(0.95, b.x));
+
+                // If bubble reaches princess
+                if (b.y > 0.80 && Math.abs(b.x - 0.5) < 0.08) {
+                    b.alive = false;
+                    takeDamage();
+                    popEffects.push({ x: b.x, y: b.y, progress: 0, colorIdx: b.colorIdx });
+                }
+                // Off screen
+                if (b.y > 1.0) b.alive = false;
+            });
+            bubbles = bubbles.filter(b => b.alive);
+
+            hearts = hearts.filter(h => {
+                h.x += h.vx * dt; h.y += h.vy * dt;
+                return h.y > -0.05 && h.y < 1.05 && h.x > -0.05 && h.x < 1.05;
+            });
+
+            popEffects.forEach(p => p.progress += dt * 2.0);
+            popEffects = popEffects.filter(p => p.progress < 1);
+
+            sparkles.forEach(p => { p.x += p.vx * dt; p.y += p.vy * dt; p.alpha -= dt * 2.0; p.life -= dt; });
+            sparkles = sparkles.filter(p => p.life > 0 && p.alpha > 0);
+
+            if (popped >= waveTarget) nextWave();
+
+            // Wand angle tracks crosshair (arm is flipped up, so invert)
+            const wdx = crossX - 0.53, wdy = crossY - 0.85;
+            const targetAngle = Math.atan2(wdx, -wdy);
+            const clampedTarget = Math.max(-1.4, Math.min(1.4, targetAngle));
+            wandAngle += (clampedTarget - wandAngle) * Math.min(1, dt * 10);
+        }
+
+        function draw(dt) {
+            ctx.clearRect(0, 0, W, H);
+            drawBackground(dt);
+
+            if (state === 'victory') {
+                drawPrincess(0.5, 0.85, 0);
+                drawVictory(dt);
+                return;
+            }
+
+            // Hearts (behind bubbles)
+            hearts.forEach(drawHeart);
+
+            // Bubbles
+            bubbles.forEach(b => { if (b.alive) drawBubble(b); });
+
+            // Pop effects
+            popEffects.forEach(drawPopEffect);
+            sparkles.forEach(drawSparkle);
+
+            if (state === 'countdown') {
+                drawPrincess(0.5, 0.85, 0);
+                drawCountdown();
+                return;
+            }
+
+            drawPrincess(0.5, 0.85, wandAngle);
+            if (state === 'playing') drawCrosshair();
+        }
+
+        function loop(ts) {
+            const dt = Math.min((ts - lastTime) / 1000, 0.05);
+            lastTime = ts;
+            resize(); update(dt); draw(dt);
+            requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            score = 0; lives = 5; wave = 1;
+            bubbles = []; popEffects = []; hearts = []; sparkles = [];
+            crossX = 0.5; crossY = 0.4; wandAngle = 0;
+            initBgSparkles(); initFlowers(); updateHUD();
+            document.getElementById('startOverlay').style.display = 'none';
+            document.getElementById('gameOverOverlay').style.display = 'none';
+            document.getElementById('winOverlay').style.display = 'none';
+            sfx.init(); startCountdown();
+        }
+
+        // ===== INPUT =====
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+                else if (state === 'playing' && e.key === ' ') shoot();
+            }
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        function screenToGame(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0.0, Math.min(1.0, (clientX - rect.left) / rect.width)),
+                y: Math.max(0.0, Math.min(0.8, (clientY - rect.top) / rect.height)),
+            };
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.clientX, e.clientY);
+            crossX = pos.x; crossY = pos.y;
+        });
+
+        canvas.addEventListener('click', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+            else if (state === 'playing') {
+                const pos = screenToGame(e.clientX, e.clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') { startGame(); return; }
+            if (state === 'playing') {
+                const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+            crossX = pos.x; crossY = pos.y;
+        }, { passive: false });
+
+        ['startOverlay', 'gameOverOverlay', 'winOverlay'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); });
+            el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); }, { passive: false });
+        });
+
+        updateHUD();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
