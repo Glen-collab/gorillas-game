@@ -1,0 +1,9 @@
+{
+  "name": "Retro Arcade",
+  "short_name": "Arcade",
+  "start_url": "Index.html",
+  "display": "fullscreen",
+  "orientation": "any",
+  "background_color": "#000000",
+  "theme_color": "#000000"
+}

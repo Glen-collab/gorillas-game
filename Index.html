@@ -3,6 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#000000">
+<link rel="manifest" href="manifest.json">
 <title>RETRO ARCADE</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
@@ -79,7 +84,7 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
 .gw-btn:hover{color:#ffa040!important}
 .game-grid{grid-template-columns:1fr 1fr 1fr;max-width:540px}
 @media(max-height:500px),(max-width:480px){#message{padding:14px 16px;line-height:1.8}.arcade-title{font-size:16px}.game-grid{grid-template-columns:1fr 1fr;max-width:320px;gap:6px}.game-card{padding:8px 10px;min-width:0}.game-card .card-icon{font-size:22px}.game-card .card-title{font-size:7px}.game-card .card-desc{font-size:12px}}
-body.game-active{background:#000;overflow:hidden}
+body.game-active{background:#000;overflow:hidden;height:100vh;height:100dvh}
 body.game-active #gameContainer{border:none;box-shadow:none;border-radius:0}
 body.game-active #exitBtn{font-size:18px;padding:6px 14px;top:32px;right:12px}
 #rotateHint{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#0a0a12;z-index:9999;flex-direction:column;align-items:center;justify-content:center;color:#ff0;font-family:'Press Start 2P',monospace;text-align:center}
@@ -87,6 +92,9 @@ body.game-active #exitBtn{font-size:18px;padding:6px 14px;top:32px;right:12px}
 #rotateHint .rotate-text{font-size:12px;letter-spacing:2px;line-height:2}
 @keyframes rotatePhone{0%,100%{transform:rotate(0deg)}25%{transform:rotate(-90deg)}50%{transform:rotate(-90deg)}75%{transform:rotate(0deg)}}
 @media(orientation:portrait){body.game-active #rotateHint{display:flex}}
+#fsHint{display:none;position:fixed;bottom:0;left:0;right:0;background:rgba(0,0,0,0.85);color:#ff0;font-family:'Press Start 2P',monospace;font-size:9px;text-align:center;padding:10px;z-index:9998;cursor:pointer;letter-spacing:1px}
+body.game-active.needs-fs #fsHint{display:block}
+@media(display-mode:fullscreen),(display-mode:standalone){body.game-active.needs-fs #fsHint{display:none}}
 </style>
 </head>
 <body>
@@ -107,6 +115,7 @@ body.game-active #exitBtn{font-size:18px;padding:6px 14px;top:32px;right:12px}
   <button id="exitBtn" class="hidden" onclick="showArcadeMenu()">&#10005; EXIT</button>
 </div>
 <div id="rotateHint"><span class="rotate-icon">&#128241;</span><span class="rotate-text">ROTATE YOUR PHONE<br>FOR FULLSCREEN</span></div>
+<div id="fsHint">TAP HERE FOR FULLSCREEN</div>
 <script>
 const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d'),W=800,H=500;
 canvas.width=W;canvas.height=H;
@@ -116,20 +125,29 @@ function resizeCanvas(){const gc=document.getElementById('gameContainer');let s;
   if(activeGame!==null){s=Math.min(window.innerWidth/W,window.innerHeight/H);}
   else{s=Math.min((window.innerWidth-10)/W,(window.innerHeight-10)/H,1.5);}
   canvas.style.width=(W*s)+'px';canvas.style.height=(H*s)+'px';gc.style.width=(W*s)+'px';gc.style.height=(H*s)+'px';}
-function enterGameMode(){document.body.classList.add('game-active');
+function isFullscreen(){return !!(document.fullscreenElement||document.webkitFullscreenElement||window.navigator.standalone||window.matchMedia('(display-mode:standalone)').matches||window.matchMedia('(display-mode:fullscreen)').matches);}
+function tryFullscreen(){
   const el=document.documentElement;
-  if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
-  else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+  const p=el.requestFullscreen?el.requestFullscreen():el.webkitRequestFullscreen?Promise.resolve(el.webkitRequestFullscreen()):Promise.reject();
+  return p.then(()=>{setTimeout(resizeCanvas,150);}).catch(()=>{document.body.classList.add('needs-fs');});}
+function enterGameMode(){document.body.classList.add('game-active');
+  if(!isFullscreen())tryFullscreen();
   if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
-  resizeCanvas();}
-function exitGameMode(){document.body.classList.remove('game-active');
+  setTimeout(resizeCanvas,100);}
+function exitGameMode(){document.body.classList.remove('game-active','needs-fs');
   if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock();
   if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
   else if(document.webkitFullscreenElement&&document.webkitExitFullscreen)document.webkitExitFullscreen();
   resizeCanvas();}
+document.getElementById('fsHint').addEventListener('click',function(){tryFullscreen();this.style.display='none';});
 resizeCanvas();window.addEventListener('resize',resizeCanvas);
-document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&activeGame!==null){document.body.classList.remove('game-active');resizeCanvas();}});
-window.addEventListener('orientationchange',()=>{setTimeout(resizeCanvas,100);});
+document.addEventListener('fullscreenchange',()=>{
+  if(document.fullscreenElement||document.webkitFullscreenElement){document.body.classList.remove('needs-fs');setTimeout(resizeCanvas,100);}
+  else if(activeGame!==null){document.body.classList.add('needs-fs');resizeCanvas();}});
+document.addEventListener('webkitfullscreenchange',()=>{
+  if(document.webkitFullscreenElement){document.body.classList.remove('needs-fs');setTimeout(resizeCanvas,100);}
+  else if(activeGame!==null){document.body.classList.add('needs-fs');resizeCanvas();}});
+window.addEventListener('orientationchange',()=>{setTimeout(resizeCanvas,150);});
 const $=id=>document.getElementById(id);
 function showEl(id){$(id).classList.remove('hidden')}
 function hideEl(id){$(id).classList.add('hidden')}
