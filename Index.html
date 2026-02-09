@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>RETRO ARCADE - Gorillas & Imperial Walkers</title>
+<title>RETRO ARCADE</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
 *{margin:0;padding:0;box-sizing:border-box}
@@ -17,6 +17,11 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
 #scoreboard.sw-mode{font-family:'Orbitron',sans-serif}
 #scoreboard.sw-mode .score-p1{color:#8cf}
 #scoreboard.sw-mode .score-p2{color:#f88}
+#scoreboard.topgun-mode{font-family:'Press Start 2P',monospace;font-size:9px;background:rgba(100,120,60,0.92);border-bottom-color:#6b7f4a}
+#scoreboard.topgun-mode .score-p1{color:#2a3518}
+#scoreboard.topgun-mode .score-p2{color:#2a3518}
+#scoreboard.topgun-mode .score-title{color:#2a3518}
+#scoreboard.topgun-mode .sub-label{color:#4a5a30}
 .score-title{font-weight:700;font-size:11px}
 .sub-label{color:#888;font-size:9px}
 #scoreboard.hidden{display:none}
@@ -35,17 +40,22 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
 #message button:hover{background:#333;border-color:#aaa;color:#fff}
 .arcade-title{font-family:'Press Start 2P',monospace;font-size:24px;color:#ff0;text-shadow:0 0 30px rgba(255,255,0,0.3),3px 3px 0 #880;letter-spacing:3px}
 .arcade-sub{font-family:'VT323',monospace;font-size:18px;color:#888;letter-spacing:2px}
-.game-card{display:inline-block;margin:8px;padding:16px 20px;background:rgba(20,20,40,0.9);border:2px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;text-align:center;min-width:160px;vertical-align:top}
+.game-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;max-width:380px;margin:8px auto}
+.game-card{display:inline-block;padding:14px 16px;background:rgba(20,20,40,0.9);border:2px solid #444;border-radius:4px;cursor:pointer;transition:all 0.2s;text-align:center;min-width:140px;vertical-align:top}
 .game-card:hover{border-color:#ff0;background:rgba(40,40,80,0.9);transform:scale(1.03);box-shadow:0 0 20px rgba(255,255,0,0.15)}
-.game-card .card-icon{font-size:36px;display:block;margin-bottom:6px}
-.game-card .card-title{font-family:'Press Start 2P',monospace;font-size:10px;color:#fff;display:block;margin-bottom:4px}
-.game-card .card-desc{font-family:'VT323',monospace;font-size:15px;color:#888;display:block}
+.game-card .card-icon{font-size:32px;display:block;margin-bottom:4px}
+.game-card .card-title{font-family:'Press Start 2P',monospace;font-size:9px;color:#fff;display:block;margin-bottom:3px}
+.game-card .card-desc{font-family:'VT323',monospace;font-size:14px;color:#888;display:block}
+.game-card.coming-soon{opacity:0.4;cursor:default;border-style:dashed}
+.game-card.coming-soon:hover{border-color:#444;background:rgba(20,20,40,0.9);transform:none;box-shadow:none}
 #exitBtn{position:absolute;top:28px;right:8px;background:rgba(0,0,0,0.7);border:1px solid #555;color:#999;font-family:'VT323',monospace;font-size:14px;padding:3px 10px;cursor:pointer;border-radius:2px;z-index:15;transition:all 0.15s}
 #exitBtn:hover{border-color:#f44;color:#f44;background:rgba(40,0,0,0.8)}
 #exitBtn.hidden{display:none}
 .sw-btn{font-family:'Orbitron',sans-serif!important;font-size:10px!important;color:#FFE81F!important;border-color:#FFE81F!important;font-weight:700;letter-spacing:1px}
 .sw-btn:hover{color:#fff!important}
 .planet-btn{min-width:100px}
+.tg-btn{font-family:'Press Start 2P',monospace!important;font-size:8px!important;color:#8b9f5a!important;border-color:#8b9f5a!important}
+.tg-btn:hover{color:#bbd07a!important}
 </style>
 </head>
 <body>
@@ -63,7 +73,7 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
     <button id="fireBtn">THROW!</button>
   </div>
   <div id="message" class="hidden"></div>
-  <button id="exitBtn" class="hidden" onclick="showArcadeMenu()">✕ EXIT</button>
+  <button id="exitBtn" class="hidden" onclick="showArcadeMenu()">&#10005; EXIT</button>
 </div>
 <script>
 const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d'),W=800,H=500;
@@ -82,7 +92,7 @@ function hideMsg(){hideEl('message')}
 // ==================== GORILLAS ====================
 const GorillasGame={
   g:[{x:0,y:0},{x:0,y:0}],sunSt:'normal',sunT:0,
-  init(){activeGame='gorillas';hideMsg();showEl('exitBtn');
+  init(){activeGame='gorillas';hideMsg();showEl('exitBtn');canvas.style.cursor='default';
     $('scoreboard').className='gorillas-mode';
     $('p1Label').textContent='P1';$('p2Label').textContent='P2';
     $('gameTitle').textContent='G O R I L L A S';$('gameTitle').style.color='#ff0';
@@ -179,7 +189,7 @@ const PK=Object.keys(PLANETS);
 
 const SWGame={
   wk:[{x:0,y:0},{x:0,y:0}],t:PLANETS.hoth,trees:[],
-  init(planet){activeGame='starwars';hideMsg();showEl('exitBtn');
+  init(planet){activeGame='starwars';hideMsg();showEl('exitBtn');canvas.style.cursor='default';
     this.t=planet?PLANETS[planet]:PLANETS[PK[Math.floor(Math.random()*PK.length)]];
     $('scoreboard').className='sw-mode';
     $('p1Label').textContent='AT-AT';$('p2Label').textContent='AT-TE';
@@ -315,6 +325,228 @@ const SWGame={
     drawExplosions();drawParticles();this.spawnEnv();updateEnv();drawEnv();}
 };
 
+// ==================== TOP GUN ====================
+const TG='#2a3518',TG_G='rgba(42,53,24,0.07)',TG_M='rgba(42,53,24,0.4)',TG_L='rgba(42,53,24,0.2)',TG_BG='#8b9f5a';
+const TG_SLOTS=[];
+(function(){for(let r=0;r<5;r++){const y=0.14+r*0.11,cols=r%2===0?4:3;
+  for(let c=0;c<cols;c++){const x=r%2===0?0.22+c*0.187:0.30+c*0.20;TG_SLOTS.push({x,y});}}})();
+
+const TopGunSFX={ctx:null,
+  init(){if(this.ctx)return;try{this.ctx=new(window.AudioContext||window.webkitAudioContext)()}catch(e){}},
+  play(type){if(!this.ctx)return;const t=this.ctx.currentTime,osc=()=>this.ctx.createOscillator(),gn=()=>this.ctx.createGain();
+    if(type==='shoot'){const o=osc(),g=gn();o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(900,t);o.frequency.exponentialRampToValueAtTime(200,t+0.08);g.gain.setValueAtTime(0.12,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.08);o.start(t);o.stop(t+0.08);}
+    else if(type==='hit'){const buf=this.ctx.createBuffer(1,this.ctx.sampleRate*0.25,this.ctx.sampleRate),d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/d.length,1.5);const src=this.ctx.createBufferSource(),g=gn();src.buffer=buf;src.connect(g);g.connect(this.ctx.destination);g.gain.setValueAtTime(0.15,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.25);src.start(t);}
+    else if(type==='damage'){const o=osc(),g=gn();o.type='sawtooth';o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(180,t);o.frequency.exponentialRampToValueAtTime(60,t+0.35);g.gain.setValueAtTime(0.1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.35);o.start(t);o.stop(t+0.35);}
+    else if(type==='gameover'){[220,190,160,120].forEach((f,i)=>{const o=osc(),g=gn();o.type='square';o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(f,t+i*0.2);g.gain.setValueAtTime(0.08,t+i*0.2);g.gain.exponentialRampToValueAtTime(0.001,t+i*0.2+0.19);o.start(t+i*0.2);o.stop(t+i*0.2+0.2);});}
+    else if(type==='countdown'){const o=osc(),g=gn();o.type='square';o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(440,t);g.gain.setValueAtTime(0.08,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.12);o.start(t);o.stop(t+0.12);}
+    else if(type==='go'){const o=osc(),g=gn();o.type='square';o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(880,t);g.gain.setValueAtTime(0.1,t);g.gain.exponentialRampToValueAtTime(0.001,t+0.2);o.start(t);o.stop(t+0.2);}
+    else if(type==='victory'){[523,659,784,1047,784,1047].forEach((f,i)=>{const o=osc(),g=gn();o.type='square';o.connect(g);g.connect(this.ctx.destination);o.frequency.setValueAtTime(f,t+i*0.15);g.gain.setValueAtTime(0.1,t+i*0.15);g.gain.exponentialRampToValueAtTime(0.001,t+i*0.15+0.14);o.start(t+i*0.15);o.stop(t+i*0.15+0.15);});}}
+};
+
+const TopGunGame={
+  en:[],ex:[],bul:[],par:[],crossX:0.5,crossY:0.4,
+  sc:0,liv:3,wav:1,st:'idle',
+  spT:0,killed:0,waveTarget:5,eSpd:0.3,spInt:2200,maxOn:4,
+  pAngle:0,gScroll:0,cdPhase:0,cdTimer:0,vicTimer:0,tgKeys:{},hitFlash:0,
+  MAX_W:9,CD_DUR:[1200,900,700,700,700,500],CD_TXT:['','READY','3','2','1','GO!'],
+
+  init(){activeGame='topgun';hideMsg();showEl('exitBtn');hideEl('input-panel');
+    canvas.style.cursor='crosshair';
+    $('scoreboard').className='topgun-mode';showEl('scoreboard');
+    $('p1Label').textContent='SCR';$('p2Label').textContent='LIVES';
+    $('gameTitle').textContent='T O P  G U N';$('gameTitle').style.color=TG;
+    $('subLabel').textContent='Naval Fighter Combat';
+    this.sc=0;this.liv=3;this.wav=1;
+    this.en=[];this.ex=[];this.bul=[];this.par=[];
+    this.crossX=0.5;this.crossY=0.4;this.pAngle=0;this.gScroll=0;this.hitFlash=0;
+    TopGunSFX.init();this.updHUD();this.startCD();gamePhase='topgun';},
+
+  updHUD(){$('score1').textContent=String(this.sc).padStart(5,'0');
+    $('subLabel').textContent='WAVE '+this.wav+'/'+this.MAX_W;
+    let lv='';for(let i=0;i<this.liv;i++)lv+='\u2708';$('score2').textContent=lv;},
+
+  getWC(w){return{target:5+w*2,speed:0.3+w*0.06,spInt:Math.max(1200-w*100,350),maxOn:Math.min(3+w,12)};},
+
+  startCD(){this.st='countdown';this.cdPhase=0;this.cdTimer=0;
+    this.en=[];this.ex=[];this.bul=[];this.par=[];
+    const c=this.getWC(this.wav);this.waveTarget=c.target;this.eSpd=c.speed;this.spInt=c.spInt;this.maxOn=c.maxOn;
+    this.killed=0;this.spT=0;},
+
+  spawnE(){const free=TG_SLOTS.filter(s=>!this.en.some(e=>e.alive&&Math.abs(e.x-s.x)<0.08&&Math.abs(e.y-s.y)<0.08));
+    if(!free.length)return;const s=free[Math.floor(Math.random()*free.length)];
+    this.en.push({x:s.x,y:s.y,bx:s.x,by:s.y,dir:Math.random()>0.5?1:-1,
+      range:0.02+Math.random()*0.02,spd:this.eSpd*(0.7+Math.random()*0.6),
+      alive:true,t:0,life:8000+Math.random()*5000+this.wav*1000,
+      shootCD:Math.max(400,1200-this.wav*80)+Math.random()*1000,flash:0});},
+
+  shoot(){if(this.st!=='playing')return;TopGunSFX.play('shoot');
+    let hit=false,closest=null,closestD=Infinity;
+    for(const e of this.en){if(!e.alive)continue;
+      const dx=this.crossX-e.x,dy=this.crossY-e.y,d=Math.sqrt(dx*dx+dy*dy);
+      if(d<0.12&&d<closestD){closest=e;closestD=d;}}
+    if(closest){closest.alive=false;hit=true;this.sc+=100*this.wav;this.killed++;TopGunSFX.play('hit');
+      this.ex.push({x:closest.x,y:closest.y,progress:0});
+      for(let i=0;i<6;i++)this.par.push({x:closest.x,y:closest.y,
+        vx:(Math.random()-0.5)*0.3,vy:(Math.random()-0.5)*0.3,
+        r:0.002+Math.random()*0.003,alpha:0.8,life:0.5+Math.random()*0.3});
+      this.hitFlash=6;}
+    if(!hit)this.bul.push({x:this.crossX,y:0.82,enemy:false});
+    this.updHUD();},
+
+  takeDmg(){this.liv--;TopGunSFX.play('damage');this.hitFlash=12;this.updHUD();
+    if(this.liv<=0){this.st='gameover';TopGunSFX.play('gameover');
+      showMsg('<span style="font-family:Press Start 2P,monospace;font-size:18px;color:#ff4444">GAME OVER</span><br>'+
+        '<span style="font-family:VT323,monospace;font-size:20px;color:#aaa">Score: '+String(this.sc).padStart(5,'0')+'</span><br>'+
+        '<button class="tg-btn" onclick="TopGunGame.restart()">PLAY AGAIN</button> <button onclick="showArcadeMenu()">ARCADE MENU</button>');}},
+
+  restart(){hideMsg();this.sc=0;this.liv=3;this.wav=1;
+    this.en=[];this.ex=[];this.bul=[];this.par=[];
+    this.crossX=0.5;this.crossY=0.4;this.pAngle=0;this.hitFlash=0;
+    TopGunSFX.init();this.updHUD();this.startCD();},
+
+  nextWave(){if(this.wav>=this.MAX_W){this.st='victory';this.vicTimer=0;TopGunSFX.play('victory');
+      showMsg('<span style="font-family:Press Start 2P,monospace;font-size:18px;color:#ff0">WINNER!</span><br>'+
+        '<span style="font-family:VT323,monospace;font-size:16px;color:#aaa">TOP GUN ACE PILOT</span><br>'+
+        '<span style="font-family:VT323,monospace;font-size:20px;color:#fff">Score: '+String(this.sc).padStart(5,'0')+'</span><br>'+
+        '<button class="tg-btn" onclick="TopGunGame.restart()">PLAY AGAIN</button> <button onclick="showArcadeMenu()">ARCADE MENU</button>');return;}
+    this.wav++;this.updHUD();this.startCD();},
+
+  updateCD(dt){this.cdTimer+=dt*1000;
+    if(this.cdTimer>=this.CD_DUR[this.cdPhase]){this.cdTimer=0;this.cdPhase++;
+      if(this.cdPhase>=2&&this.cdPhase<=4)TopGunSFX.play('countdown');
+      if(this.cdPhase===5)TopGunSFX.play('go');
+      if(this.cdPhase>=this.CD_DUR.length){this.st='playing';}}},
+
+  update(dt){
+    if(this.hitFlash>0)this.hitFlash--;
+    if(this.st==='countdown'){this.updateCD(dt);return;}
+    if(this.st!=='playing')return;
+    const cs=0.5;
+    if(this.tgKeys['ArrowLeft']||this.tgKeys['a'])this.crossX-=cs*dt;
+    if(this.tgKeys['ArrowRight']||this.tgKeys['d'])this.crossX+=cs*dt;
+    if(this.tgKeys['ArrowUp']||this.tgKeys['w'])this.crossY-=cs*dt;
+    if(this.tgKeys['ArrowDown']||this.tgKeys['s'])this.crossY+=cs*dt;
+    this.crossX=Math.max(0,Math.min(1,this.crossX));
+    this.crossY=Math.max(0,Math.min(0.8,this.crossY));
+    // Spawn
+    this.spT+=dt*1000;
+    if(this.spT>=this.spInt&&this.en.filter(e=>e.alive).length<this.maxOn){this.spawnE();this.spT=0;}
+    // Enemies
+    this.en.forEach(e=>{if(!e.alive)return;e.t+=dt*1000;
+      e.x=e.bx+Math.sin(e.t*0.0015*e.spd)*e.range*e.dir;
+      e.y=e.by+Math.sin(e.t*0.001*e.spd)*0.015;
+      e.x=Math.max(0.05,Math.min(0.95,e.x));e.y=Math.max(0.05,Math.min(0.7,e.y));
+      e.shootCD-=dt*1000;
+      if(e.shootCD<=0){e.flash=150;
+        e.shootCD=Math.max(800,1800-this.wav*120)+Math.random()*1200;
+        const dx=0.5-e.x+(Math.random()-0.5)*0.15,dy=0.85-e.y;
+        const dist=Math.sqrt(dx*dx+dy*dy),bs=0.45+this.wav*0.03;
+        this.bul.push({x:e.x,y:e.y+0.03,vx:(dx/dist)*bs,vy:(dy/dist)*bs,enemy:true});}
+      if(e.flash>0)e.flash-=dt*1000;
+      if(e.t>e.life)e.alive=false;});
+    this.en=this.en.filter(e=>e.alive);
+    // Bullets
+    this.bul=this.bul.filter(b=>{
+      if(b.enemy){b.x+=(b.vx||0)*dt;b.y+=(b.vy||0)*dt;
+        if(Math.abs(b.x-0.5)<0.04&&Math.abs(b.y-0.85)<0.035){this.takeDmg();return false;}
+        return b.y<1.05&&b.y>-0.05&&b.x>-0.05&&b.x<1.05;}
+      else{b.y-=1.8*dt;return b.y>-0.05;}});
+    // Effects
+    this.ex.forEach(e=>e.progress+=dt*2.5);this.ex=this.ex.filter(e=>e.progress<1);
+    this.par.forEach(p=>{p.x+=p.vx*dt;p.y+=p.vy*dt;p.alpha-=dt*2;p.life-=dt;});
+    this.par=this.par.filter(p=>p.life>0&&p.alpha>0);
+    // Wave check
+    if(this.killed>=this.waveTarget)this.nextWave();
+    // Player angle
+    const dx=this.crossX-0.5,dy=this.crossY-0.85;
+    const ta=Math.max(-0.7,Math.min(0.7,Math.atan2(dx,-dy)*0.5));
+    this.pAngle+=(ta-this.pAngle)*Math.min(1,dt*8);},
+
+  // ---- Drawing ----
+  drawJet(cx,cy,size,color,flipped,angle){
+    const x=cx*W,y=cy*H,s=size*Math.min(W,H);
+    ctx.fillStyle=color;ctx.save();ctx.translate(x,y);if(angle)ctx.rotate(angle);
+    ctx.beginPath();ctx.moveTo(0,-s*0.5);ctx.lineTo(s*0.08,s*0.3);ctx.lineTo(-s*0.08,s*0.3);ctx.closePath();ctx.fill();
+    ctx.beginPath();
+    if(flipped){ctx.moveTo(-s*0.45,s*0.05);ctx.lineTo(0,-s*0.15);ctx.lineTo(s*0.45,s*0.05);ctx.lineTo(s*0.35,s*0.15);ctx.lineTo(-s*0.35,s*0.15);}
+    else{ctx.moveTo(-s*0.45,s*0.1);ctx.lineTo(0,-s*0.1);ctx.lineTo(s*0.45,s*0.1);ctx.lineTo(s*0.35,s*0.2);ctx.lineTo(-s*0.35,s*0.2);}
+    ctx.closePath();ctx.fill();
+    ctx.beginPath();
+    if(flipped){ctx.moveTo(-s*0.2,-s*0.45);ctx.lineTo(0,-s*0.25);ctx.lineTo(s*0.2,-s*0.45);}
+    else{ctx.moveTo(-s*0.18,s*0.4);ctx.lineTo(0,s*0.2);ctx.lineTo(s*0.18,s*0.4);}
+    ctx.closePath();ctx.fill();ctx.restore();},
+
+  drawGhosts(){TG_SLOTS.forEach(s=>this.drawJet(s.x,s.y,0.045,TG_G,true));},
+
+  drawGround(dt){this.gScroll+=dt*0.5;const gy=H*0.88;
+    ctx.strokeStyle=TG_M;ctx.lineWidth=1;
+    for(let i=0;i<4;i++){const y=gy+i*(H*0.025);ctx.beginPath();
+      for(let x=-20;x<W+20;x+=4){const w=Math.sin((x+this.gScroll*80+i*40)*0.025)*3;
+        if(x===-20)ctx.moveTo(x,y+w);else ctx.lineTo(x,y+w);}ctx.stroke();}
+    ctx.fillStyle=TG_G;const cx2=W*0.5,cy2=gy+H*0.06;
+    ctx.fillRect(cx2-W*0.08,cy2,W*0.16,H*0.01);
+    ctx.fillRect(cx2-W*0.05,cy2-H*0.008,W*0.008,H*0.008);
+    ctx.fillRect(cx2+W*0.02,cy2-H*0.014,W*0.005,H*0.014);},
+
+  drawCross(){const x=this.crossX*W,y=this.crossY*H,r=18*(Math.min(W,H)/600),ext=8*(Math.min(W,H)/600);
+    ctx.strokeStyle=TG;ctx.lineWidth=1.5;ctx.beginPath();ctx.arc(x,y,r,0,Math.PI*2);ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(x-r-ext,y);ctx.lineTo(x-r+4,y);ctx.moveTo(x+r-4,y);ctx.lineTo(x+r+ext,y);
+    ctx.moveTo(x,y-r-ext);ctx.lineTo(x,y-r+4);ctx.moveTo(x,y+r-4);ctx.lineTo(x,y+r+ext);ctx.stroke();
+    ctx.fillStyle=TG;ctx.beginPath();ctx.arc(x,y,2,0,Math.PI*2);ctx.fill();},
+
+  drawExpl(ex){const x=ex.x*W,y=ex.y*H,p=ex.progress,r=(15+p*40)*(Math.min(W,H)/600);
+    ctx.strokeStyle=p<0.6?TG:TG_M;ctx.lineWidth=2;
+    for(let i=0;i<8;i++){const a=(i/8)*Math.PI*2+p*3;ctx.beginPath();
+      ctx.moveTo(x+Math.cos(a)*r*0.2,y+Math.sin(a)*r*0.2);
+      ctx.lineTo(x+Math.cos(a)*r*(0.5+p*0.5),y+Math.sin(a)*r*(0.5+p*0.5));ctx.stroke();}
+    if(p<0.4){ctx.fillStyle=TG;ctx.beginPath();ctx.arc(x,y,r*0.25*(1-p*2),0,Math.PI*2);ctx.fill();}
+    ctx.strokeStyle=TG_M;ctx.lineWidth=1;ctx.beginPath();ctx.arc(x,y,r*p,0,Math.PI*2);ctx.stroke();},
+
+  drawCD(){const cx=W/2,cy=H/2;ctx.fillStyle=TG;
+    ctx.font=Math.min(W,H)*0.04+'px "Press Start 2P"';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('WAVE '+this.wav+' OF '+this.MAX_W,cx,cy-Math.min(W,H)*0.08);
+    const txt=this.CD_TXT[this.cdPhase];
+    if(txt){const isNum=['3','2','1'].includes(txt),isGo=txt==='GO!';
+      const fs=isNum?0.12:(isGo?0.08:0.04);
+      const phase=this.cdTimer/this.CD_DUR[this.cdPhase];
+      const sc=isNum?1+Math.sin(phase*Math.PI)*0.15:1;
+      const al=isGo?Math.max(0,1-phase*2):1;
+      ctx.save();ctx.translate(cx,cy+Math.min(W,H)*0.02);ctx.scale(sc,sc);ctx.globalAlpha=al;
+      ctx.fillStyle=TG;ctx.font=Math.min(W,H)*fs+'px "Press Start 2P"';ctx.fillText(txt,0,0);
+      ctx.restore();ctx.globalAlpha=1;}},
+
+  draw(dt){
+    // LCD green background
+    ctx.fillStyle=TG_BG;ctx.fillRect(0,0,W,H);
+    // Scanlines
+    ctx.fillStyle='rgba(0,0,0,0.02)';for(let y=0;y<H;y+=3)ctx.fillRect(0,y,W,1);
+    // Hit flash overlay
+    if(this.hitFlash>0){ctx.fillStyle='rgba(42,53,24,0.15)';ctx.fillRect(0,0,W,H);}
+
+    this.drawGhosts();this.drawGround(dt);
+
+    if(this.st==='countdown'){this.drawJet(0.5,0.85,0.055,TG,false,0);this.drawCD();return;}
+    if(this.st==='gameover'||this.st==='victory'){this.drawJet(0.5,0.85,0.055,TG,false,0);return;}
+
+    // Enemy bullets
+    this.bul.filter(b=>b.enemy).forEach(b=>{ctx.fillStyle=TG;ctx.fillRect(b.x*W-1.5,b.y*H-4,3,8);});
+    // Player bullets
+    this.bul.filter(b=>!b.enemy).forEach(b=>{ctx.fillStyle=TG;ctx.fillRect(b.x*W-1.5,b.y*H-5,3,10);
+      ctx.fillStyle=TG_M;ctx.fillRect(b.x*W-1,b.y*H+5,2,6);});
+    // Enemies
+    this.en.forEach(e=>{if(!e.alive)return;
+      this.drawJet(e.x,e.y,0.045,e.flash>80?TG_M:TG,true);
+      if(e.flash>80){ctx.fillStyle=TG;ctx.beginPath();ctx.arc(e.x*W,(e.y+0.035)*H,4,0,Math.PI*2);ctx.fill();}});
+    // Explosions & particles
+    this.ex.forEach(e=>this.drawExpl(e));
+    this.par.forEach(p=>{ctx.fillStyle='rgba(42,53,24,'+p.alpha+')';
+      ctx.beginPath();ctx.arc(p.x*W,p.y*H,p.r*Math.min(W,H),0,Math.PI*2);ctx.fill();});
+    // Player jet
+    this.drawJet(0.5,0.85,0.055,TG,false,this.pAngle);
+    if(this.st==='playing')this.drawCross();}
+};
+
 // ==================== SHARED ====================
 function createExplosion(x,y,r){explosions.push({x,y,radius:r,age:0,maxAge:35});
   const c=activeGame==='starwars'?SWGame.t.bm:['#ff0','#f80','#f00','#fff','#aaa'];
@@ -348,31 +580,63 @@ function drawArcadeBG(){ctx.fillStyle='#0a0a18';ctx.fillRect(0,0,W,H);menuT+=0.0
   const gr=ctx.createLinearGradient(0,H-60,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(40,20,80,0.3)');ctx.fillStyle=gr;ctx.fillRect(0,H-60,W,60);}
 
 function showArcadeMenu(){activeGame=null;gamePhase='arcade';projectile=null;explosions=[];particles=[];envParticles=[];
+  canvas.style.cursor='default';
   hideEl('input-panel');hideEl('scoreboard');hideEl('exitBtn');hideMsg();
   showMsg('<span class="arcade-title">RETRO ARCADE</span><br>'+
-    '<span class="arcade-sub">\u2014 SELECT GAME \u2014</span><br><br>'+
-    '<div class="game-card" onclick="launchGorillas()"><span class="card-icon">\uD83C\uDF4C</span><span class="card-title">GORILLAS</span><span class="card-desc">QBasic Classic<br>Throw bananas!</span></div>'+
-    '<div class="game-card" onclick="SWGame.showPl()"><span class="card-icon">\u2694</span><span class="card-title">IMPERIAL<br>WALKERS</span><span class="card-desc">Star Wars Artillery<br>AT-AT vs AT-TE</span></div>');}
+    '<span class="arcade-sub">\u2014 SELECT GAME \u2014</span><br>'+
+    '<div class="game-grid">'+
+      '<div class="game-card" onclick="launchGorillas()"><span class="card-icon">\uD83C\uDF4C</span><span class="card-title">GORILLAS</span><span class="card-desc">QBasic Classic<br>Throw bananas!</span></div>'+
+      '<div class="game-card" onclick="SWGame.showPl()"><span class="card-icon">\u2694</span><span class="card-title">IMPERIAL<br>WALKERS</span><span class="card-desc">Star Wars Artillery<br>AT-AT vs AT-TE</span></div>'+
+      '<div class="game-card" onclick="launchTopGun()"><span class="card-icon">\u2708</span><span class="card-title">TOP GUN</span><span class="card-desc">Naval Fighter Combat<br>Shoot jets!</span></div>'+
+      '<div class="game-card coming-soon"><span class="card-icon">?</span><span class="card-title">COMING<br>SOON</span><span class="card-desc">More games<br>on the way!</span></div>'+
+    '</div>');}
 
 window.launchGorillas=function(){hideMsg();GorillasGame.init();};
+window.launchTopGun=function(){hideMsg();TopGunGame.init();};
 window.showArcadeMenu=showArcadeMenu;
 window.GorillasGame=GorillasGame;
 window.SWGame=SWGame;
+window.TopGunGame=TopGunGame;
 
 // ==================== MAIN LOOP ====================
 let lastTime=0;
 function gameLoop(ts){const dt=Math.min((ts-lastTime)/1000,0.05);lastTime=ts;
-  if(gamePhase==='flight'){if(activeGame==='gorillas')GorillasGame.updateP(dt);else if(activeGame==='starwars')SWGame.updateP(dt);}
-  for(let i=explosions.length-1;i>=0;i--){explosions[i].age++;if(explosions[i].age>=explosions[i].maxAge)explosions.splice(i,1);}
-  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life-=p.decay;if(p.life<=0)particles.splice(i,1);}
-  if(gamePhase==='arcade')drawArcadeBG();else if(activeGame==='gorillas')GorillasGame.draw();else if(activeGame==='starwars')SWGame.draw();
+  if(activeGame==='topgun'){
+    TopGunGame.update(dt);TopGunGame.draw(dt);
+  } else {
+    if(gamePhase==='flight'){if(activeGame==='gorillas')GorillasGame.updateP(dt);else if(activeGame==='starwars')SWGame.updateP(dt);}
+    for(let i=explosions.length-1;i>=0;i--){explosions[i].age++;if(explosions[i].age>=explosions[i].maxAge)explosions.splice(i,1);}
+    for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.x+=p.vx;p.y+=p.vy;p.vy+=0.15;p.life-=p.decay;if(p.life<=0)particles.splice(i,1);}
+    if(gamePhase==='arcade')drawArcadeBG();else if(activeGame==='gorillas')GorillasGame.draw();else if(activeGame==='starwars')SWGame.draw();
+  }
   requestAnimationFrame(gameLoop);}
 
+// ==================== INPUT ====================
 $('fireBtn').addEventListener('click',()=>{if(gamePhase!=='input')return;
   const a=Math.max(0,Math.min(90,parseFloat($('angleInput').value)||45));
   const p=Math.max(1,Math.min(200,parseFloat($('powerInput').value)||50));
   if(activeGame==='gorillas')GorillasGame.fire(a,p);else if(activeGame==='starwars')SWGame.fire(a,p);});
-document.addEventListener('keydown',e=>{if(e.key==='Enter'&&gamePhase==='input')$('fireBtn').click();});
+
+document.addEventListener('keydown',e=>{
+  if(activeGame==='topgun'){
+    TopGunGame.tgKeys[e.key]=true;
+    if(e.key===' '){e.preventDefault();TopGunGame.shoot();}
+    return;}
+  if(e.key==='Enter'&&gamePhase==='input')$('fireBtn').click();});
+document.addEventListener('keyup',e=>{if(activeGame==='topgun')TopGunGame.tgKeys[e.key]=false;});
+
+canvas.addEventListener('mousemove',e=>{
+  if(activeGame!=='topgun'||TopGunGame.st!=='playing')return;
+  const rect=canvas.getBoundingClientRect();
+  TopGunGame.crossX=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+  TopGunGame.crossY=Math.max(0,Math.min(0.8,(e.clientY-rect.top)/rect.height));});
+
+canvas.addEventListener('click',e=>{
+  if(activeGame==='topgun'&&TopGunGame.st==='playing'){
+    const rect=canvas.getBoundingClientRect();
+    TopGunGame.crossX=Math.max(0,Math.min(1,(e.clientX-rect.left)/rect.width));
+    TopGunGame.crossY=Math.max(0,Math.min(0.8,(e.clientY-rect.top)/rect.height));
+    TopGunGame.shoot();}});
 
 showArcadeMenu();requestAnimationFrame(gameLoop);
 </script>
