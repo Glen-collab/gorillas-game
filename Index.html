@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>RETRO ARCADE</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=VT323&family=Press+Start+2P&family=Orbitron:wght@400;700;900&display=swap');
@@ -79,6 +79,14 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
 .gw-btn:hover{color:#ffa040!important}
 .game-grid{grid-template-columns:1fr 1fr 1fr;max-width:540px}
 @media(max-height:500px),(max-width:480px){#message{padding:14px 16px;line-height:1.8}.arcade-title{font-size:16px}.game-grid{grid-template-columns:1fr 1fr;max-width:320px;gap:6px}.game-card{padding:8px 10px;min-width:0}.game-card .card-icon{font-size:22px}.game-card .card-title{font-size:7px}.game-card .card-desc{font-size:12px}}
+body.game-active{background:#000;overflow:hidden}
+body.game-active #gameContainer{border:none;box-shadow:none;border-radius:0}
+body.game-active #exitBtn{font-size:18px;padding:6px 14px;top:32px;right:12px}
+#rotateHint{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#0a0a12;z-index:9999;flex-direction:column;align-items:center;justify-content:center;color:#ff0;font-family:'Press Start 2P',monospace;text-align:center}
+#rotateHint .rotate-icon{font-size:64px;margin-bottom:20px;animation:rotatePhone 2s ease-in-out infinite}
+#rotateHint .rotate-text{font-size:12px;letter-spacing:2px;line-height:2}
+@keyframes rotatePhone{0%,100%{transform:rotate(0deg)}25%{transform:rotate(-90deg)}50%{transform:rotate(-90deg)}75%{transform:rotate(0deg)}}
+@media(orientation:portrait){body.game-active #rotateHint{display:flex}}
 </style>
 </head>
 <body>
@@ -98,14 +106,30 @@ canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
   <div id="message" class="hidden"></div>
   <button id="exitBtn" class="hidden" onclick="showArcadeMenu()">&#10005; EXIT</button>
 </div>
+<div id="rotateHint"><span class="rotate-icon">&#128241;</span><span class="rotate-text">ROTATE YOUR PHONE<br>FOR FULLSCREEN</span></div>
 <script>
 const canvas=document.getElementById('gameCanvas'),ctx=canvas.getContext('2d'),W=800,H=500;
 canvas.width=W;canvas.height=H;
-function resizeCanvas(){const s=Math.min((window.innerWidth-10)/W,(window.innerHeight-10)/H,1.5);canvas.style.width=(W*s)+'px';canvas.style.height=(H*s)+'px';const gc=document.getElementById('gameContainer');gc.style.width=(W*s)+'px';gc.style.height=(H*s)+'px';}
-resizeCanvas();window.addEventListener('resize',resizeCanvas);
-
 let activeGame=null,buildings=[],scores=[0,0],currentPlayer=0,projectile=null;
 let explosions=[],particles=[],envParticles=[],gamePhase='arcade',wind=0,terrainCanvas,terrainCtx;
+function resizeCanvas(){const gc=document.getElementById('gameContainer');let s;
+  if(activeGame!==null){s=Math.min(window.innerWidth/W,window.innerHeight/H);}
+  else{s=Math.min((window.innerWidth-10)/W,(window.innerHeight-10)/H,1.5);}
+  canvas.style.width=(W*s)+'px';canvas.style.height=(H*s)+'px';gc.style.width=(W*s)+'px';gc.style.height=(H*s)+'px';}
+function enterGameMode(){document.body.classList.add('game-active');
+  const el=document.documentElement;
+  if(el.requestFullscreen)el.requestFullscreen().catch(()=>{});
+  else if(el.webkitRequestFullscreen)el.webkitRequestFullscreen();
+  if(screen.orientation&&screen.orientation.lock)screen.orientation.lock('landscape').catch(()=>{});
+  resizeCanvas();}
+function exitGameMode(){document.body.classList.remove('game-active');
+  if(screen.orientation&&screen.orientation.unlock)screen.orientation.unlock();
+  if(document.fullscreenElement)document.exitFullscreen().catch(()=>{});
+  else if(document.webkitFullscreenElement&&document.webkitExitFullscreen)document.webkitExitFullscreen();
+  resizeCanvas();}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement&&activeGame!==null){document.body.classList.remove('game-active');resizeCanvas();}});
+window.addEventListener('orientationchange',()=>{setTimeout(resizeCanvas,100);});
 const $=id=>document.getElementById(id);
 function showEl(id){$(id).classList.remove('hidden')}
 function hideEl(id){$(id).classList.add('hidden')}
@@ -279,7 +303,7 @@ const SWGame={
       showMsg(msg+'<br><span style="font-family:VT323;font-size:20px;color:#aaa">Score: '+scores[0]+' - '+scores[1]+'</span><br>'+
         '<button class="sw-btn" onclick="SWGame.sameRound()">NEXT ROUND</button> <button class="sw-btn" onclick="SWGame.showPl()">CHANGE MAP</button> <button onclick="showArcadeMenu()">ARCADE MENU</button>');
       gamePhase='roundOver';},1000);},
-  showPl(){hideMsg();hideEl('input-panel');showEl('exitBtn');scores=[0,0];currentPlayer=0;$('score1').textContent='0';$('score2').textContent='0';gamePhase='title';
+  showPl(){hideMsg();hideEl('input-panel');showEl('exitBtn');enterGameMode();scores=[0,0];currentPlayer=0;$('score1').textContent='0';$('score2').textContent='0';gamePhase='title';
     showMsg('<span style="font-family:Orbitron,sans-serif;font-size:18px;letter-spacing:3px;color:#FFE81F">CHOOSE PLANET</span><br>'+
       '<button class="sw-btn planet-btn" onclick="SWGame.init(\'hoth\')">&#10052; HOTH</button>'+
       '<button class="sw-btn planet-btn" onclick="SWGame.init(\'tatooine\')">&#9728; TATOOINE</button><br>'+
@@ -1575,7 +1599,7 @@ function drawArcadeBG(){ctx.fillStyle='#0a0a18';ctx.fillRect(0,0,W,H);menuT+=0.0
   const gr=ctx.createLinearGradient(0,H-60,0,H);gr.addColorStop(0,'rgba(0,0,0,0)');gr.addColorStop(1,'rgba(40,20,80,0.3)');ctx.fillStyle=gr;ctx.fillRect(0,H-60,W,60);}
 
 function showArcadeMenu(){activeGame=null;gamePhase='arcade';projectile=null;explosions=[];particles=[];envParticles=[];
-  canvas.style.cursor='default';
+  canvas.style.cursor='default';exitGameMode();
   hideEl('input-panel');hideEl('scoreboard');hideEl('exitBtn');hideMsg();
   showMsg('<span class="arcade-title">RETRO ARCADE</span><br>'+
     '<span class="arcade-sub">\u2014 SELECT GAME \u2014</span><br>'+
@@ -1591,11 +1615,11 @@ function showArcadeMenu(){activeGame=null;gamePhase='arcade';projectile=null;exp
       '<div class="game-card" onclick="window.location.href=\'unicorn.html\'"><span class="card-icon">\uD83E\uDD84</span><span class="card-title">UNICORN<br>STAMPEDE</span><span class="card-desc">Fantasy Action<br>Charge!</span></div>'+
     '</div>');}
 
-window.launchGorillas=function(){hideMsg();GorillasGame.init();};
-window.launchTopGun=function(){hideMsg();TopGunGame.init();};
-window.launchStarTrek=function(){hideMsg();StarTrekGame.init();};
-window.launchTrenchRun=function(){hideMsg();TrenchRunGame.init();};
-window.launchGuerrilla=function(){hideMsg();GuerrillaWarfareGame.init();};
+window.launchGorillas=function(){hideMsg();enterGameMode();GorillasGame.init();};
+window.launchTopGun=function(){hideMsg();enterGameMode();TopGunGame.init();};
+window.launchStarTrek=function(){hideMsg();enterGameMode();StarTrekGame.init();};
+window.launchTrenchRun=function(){hideMsg();enterGameMode();TrenchRunGame.init();};
+window.launchGuerrilla=function(){hideMsg();enterGameMode();GuerrillaWarfareGame.init();};
 window.showArcadeMenu=showArcadeMenu;
 window.GorillasGame=GorillasGame;
 window.SWGame=SWGame;
