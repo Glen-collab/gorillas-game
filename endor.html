@@ -272,7 +272,7 @@
         let totalTime = 0;
 
         // ===== 3D FOREST (trees rush toward player) =====
-        const VP_Y = 0.38; // Vanishing point Y (horizon line)
+        const VP_Y = 0.22; // Vanishing point Y (horizon — low = ground-level view)
         const TREE_COUNT = 45;
         const TREE_FAR = 14;
         const TREE_NEAR = 0.3;
@@ -282,11 +282,11 @@
         function spawnTree(farOnly) {
             const zMin = farOnly ? 6 : 2;
             const z = zMin + Math.random() * (TREE_FAR - zMin);
-            // Spread trees wide so they appear at edges
-            const x = (Math.random() - 0.5) * 4.0;
-            // Avoid spawning right in the center path (leave a gap to fly through)
+            // Wide horizontal spread — trees scattered across the forest floor
+            const x = (Math.random() - 0.5) * 7.0;
+            // Keep a clear center path so you fly between trunks
             const absX = Math.abs(x);
-            const finalX = absX < 0.3 ? (x < 0 ? x - 0.4 : x + 0.4) : x;
+            const finalX = absX < 0.5 ? (x < 0 ? x - 0.6 : x + 0.6) : x;
             return {
                 x: finalX,
                 z: z,
@@ -341,16 +341,16 @@
             // Sort back-to-front for painter's algorithm
             trees3d.sort((a, b) => b.z - a.z);
 
-            // ===== SKY (fills entire canvas as base) =====
+            // ===== SKY (thin strip — mostly forest and ground visible) =====
             const skyGrad = ctx.createLinearGradient(0, 0, 0, vpY);
             skyGrad.addColorStop(0, '#3a6aaa');
-            skyGrad.addColorStop(0.7, '#5a8aba');
-            skyGrad.addColorStop(1, '#7aaa6a');
+            skyGrad.addColorStop(0.6, '#5a8aba');
+            skyGrad.addColorStop(1, '#4a7a4a');
             ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, W, vpY + H * 0.05);
+            ctx.fillRect(0, 0, W, vpY + H * 0.03);
 
-            // ===== CANOPY CEILING (top ~30%) =====
-            const canopyBase = H * 0.30;
+            // ===== CANOPY CEILING (thin strip at top — we're down low) =====
+            const canopyBase = H * 0.16;
             ctx.fillStyle = '#1a3a0a';
             ctx.fillRect(0, 0, W, canopyBase);
 
@@ -456,18 +456,22 @@
                 if (tr.z < TREE_NEAR || tr.z > TREE_FAR) return;
                 const scale = 1 / tr.z;
 
-                // Project tree position: x spreads from vanishing point
-                const screenX = vpX + tr.x * W * 0.35 * scale;
+                // Project tree X: wide spread from vanishing point
+                const screenX = vpX + tr.x * W * 0.5 * scale;
                 const trunkW = tr.baseWidth * W * scale;
-                const trunkH = H * 0.8 * scale;
 
-                // Tree base sits on ground — the further, the closer to horizon
-                const baseY = vpY + (H - vpY) * (1 / tr.z) * 1.8;
+                // Tree base anchored on ground plane below horizon
+                // Closer trees have baseY further below horizon (closer to bottom of screen)
+                const groundPlane = vpY + (H - vpY) * Math.min(1, 1.2 / tr.z);
+                // Trunks grow UP from ground — taller when closer
+                const trunkH = H * 1.2 * scale;
+                const baseY = groundPlane;
+                // Top goes above horizon for close trees (you see just the trunk base)
                 const topY = baseY - trunkH;
 
                 // Skip if off screen
                 if (screenX + trunkW < -50 || screenX - trunkW > W + 50) return;
-                if (baseY < vpY - 20) return;
+                if (baseY < vpY) return;
 
                 // Depth-based coloring: far = hazy green, near = dark brown
                 const depthFrac = Math.min(1, (tr.z - TREE_NEAR) / (TREE_FAR - TREE_NEAR));
@@ -487,8 +491,8 @@
                     ctx.fillStyle = `rgb(${r},${g},${b})`;
                 }
 
-                // Draw trunk
-                ctx.fillRect(screenX - trunkW / 2, topY, trunkW, trunkH + (H - baseY) * 0.5);
+                // Draw trunk — extends from top down past base into ground
+                ctx.fillRect(screenX - trunkW / 2, topY, trunkW, H - topY);
 
                 // Bark texture lines (only on close enough trees)
                 if (tr.z < 6 && trunkW > 6) {
@@ -503,8 +507,8 @@
                     }
                 }
 
-                // Foliage at top of trunk
-                if (tr.hasFoliage && topY > -H * 0.5) {
+                // Foliage at top of trunk (only visible on distant trees)
+                if (tr.hasFoliage && topY > -H * 0.2 && tr.z > 3) {
                     const fSize = trunkW * tr.foliageSize * 2.5;
                     const fg = Math.floor(35 + depthFrac * 25 + tr.shade * 10);
                     const fr = Math.floor(15 + tr.shade * 10);
