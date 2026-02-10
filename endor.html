@@ -271,54 +271,40 @@
         let swerveInterval = 2.0;
         let totalTime = 0;
 
-        // ===== FOREST LAYERS =====
-        // Far trees (thin silhouettes at horizon)
-        let farTrees = [];
-        // Mid trees (medium trunks)
-        let midTrees = [];
-        // Near trees (massive rushing past)
-        let nearTrees = [];
-        // Light shafts
-        let lightShafts = [];
+        // ===== 3D FOREST (trees rush toward player) =====
+        const VP_Y = 0.38; // Vanishing point Y (horizon line)
+        const TREE_COUNT = 45;
+        const TREE_FAR = 14;
+        const TREE_NEAR = 0.3;
+        const TREE_SPEED = 3.5; // Base forward speed
+        let trees3d = [];
+
+        function spawnTree(farOnly) {
+            const zMin = farOnly ? 6 : 2;
+            const z = zMin + Math.random() * (TREE_FAR - zMin);
+            // Spread trees wide so they appear at edges
+            const x = (Math.random() - 0.5) * 4.0;
+            // Avoid spawning right in the center path (leave a gap to fly through)
+            const absX = Math.abs(x);
+            const finalX = absX < 0.3 ? (x < 0 ? x - 0.4 : x + 0.4) : x;
+            return {
+                x: finalX,
+                z: z,
+                baseWidth: 0.08 + Math.random() * 0.12,
+                shade: Math.random(),
+                barkLines: Math.floor(2 + Math.random() * 4),
+                hasFoliage: Math.random() > 0.2,
+                foliageSize: 0.6 + Math.random() * 0.8,
+            };
+        }
 
         function initForest() {
-            farTrees = [];
-            for (let i = 0; i < 20; i++) {
-                farTrees.push({
-                    x: Math.random() * 2.4 - 0.2,
-                    width: 0.008 + Math.random() * 0.012,
-                    height: 0.15 + Math.random() * 0.12,
-                    shade: Math.random() * 0.3,
-                });
+            trees3d = [];
+            for (let i = 0; i < TREE_COUNT; i++) {
+                trees3d.push(spawnTree(false));
             }
-            midTrees = [];
-            for (let i = 0; i < 14; i++) {
-                midTrees.push({
-                    x: Math.random() * 2.6 - 0.3,
-                    width: 0.02 + Math.random() * 0.025,
-                    height: 0.25 + Math.random() * 0.2,
-                    shade: Math.random() * 0.3,
-                    barkLines: Math.floor(2 + Math.random() * 3),
-                });
-            }
-            nearTrees = [];
-            for (let i = 0; i < 8; i++) {
-                nearTrees.push({
-                    x: Math.random() * 3.0 - 0.5,
-                    width: 0.06 + Math.random() * 0.08,
-                    height: 0.5 + Math.random() * 0.4,
-                    shade: Math.random() * 0.2,
-                });
-            }
-            lightShafts = [];
-            for (let i = 0; i < 5; i++) {
-                lightShafts.push({
-                    x: Math.random(),
-                    width: 0.03 + Math.random() * 0.05,
-                    alpha: 0.03 + Math.random() * 0.04,
-                    speed: 0.01 + Math.random() * 0.02,
-                });
-            }
+            // Sort by depth initially
+            trees3d.sort((a, b) => b.z - a.z);
         }
 
         function resize() {
@@ -334,192 +320,223 @@
         function drawEndorForest(dt) {
             const speed = state === 'playing' ? 1.0 : 0.3;
             totalTime += dt * speed;
+            const vpX = W * 0.5;
+            const vpY = H * VP_Y;
 
-            // Sky - tiny patches visible through canopy
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.25);
+            // ===== MOVE TREES FORWARD =====
+            const fwdSpeed = TREE_SPEED * speed;
+            trees3d.forEach(tr => {
+                tr.z -= fwdSpeed * dt;
+                // Swerve shifts trees laterally (near trees shift more)
+                tr.x += swerveAmount * dt * (1.5 / Math.max(tr.z, 0.5));
+                if (tr.z < TREE_NEAR) {
+                    // Respawn far away
+                    const nt = spawnTree(true);
+                    tr.x = nt.x; tr.z = nt.z;
+                    tr.baseWidth = nt.baseWidth; tr.shade = nt.shade;
+                    tr.barkLines = nt.barkLines; tr.hasFoliage = nt.hasFoliage;
+                    tr.foliageSize = nt.foliageSize;
+                }
+            });
+            // Sort back-to-front for painter's algorithm
+            trees3d.sort((a, b) => b.z - a.z);
+
+            // ===== SKY (fills entire canvas as base) =====
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, vpY);
             skyGrad.addColorStop(0, '#3a6aaa');
-            skyGrad.addColorStop(0.5, '#5a8aba');
-            skyGrad.addColorStop(1, '#2d5a1a');
+            skyGrad.addColorStop(0.7, '#5a8aba');
+            skyGrad.addColorStop(1, '#7aaa6a');
             ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, W, H * 0.30);
+            ctx.fillRect(0, 0, W, vpY + H * 0.05);
 
-            // Canopy ceiling (top ~25%) - overlapping dark green shapes
-            const canopyBase = H * 0.28;
+            // ===== CANOPY CEILING (top ~30%) =====
+            const canopyBase = H * 0.30;
             ctx.fillStyle = '#1a3a0a';
             ctx.fillRect(0, 0, W, canopyBase);
 
-            // Canopy leaf clusters with variation
-            for (let i = 0; i < 30; i++) {
-                const cx = ((i * 137.5 + totalTime * 15) % (W + 200)) - 100;
-                const cy = canopyBase * (0.3 + Math.sin(i * 2.7) * 0.25);
-                const rx = 40 + Math.sin(i * 1.3) * 25;
-                const ry = 20 + Math.cos(i * 0.9) * 12;
-                const green = Math.floor(40 + Math.sin(i * 0.7) * 15);
-                ctx.fillStyle = `rgb(${Math.floor(20 + Math.sin(i * 1.1) * 8)},${green + 20},${Math.floor(8 + Math.sin(i * 0.5) * 5)})`;
+            // Canopy leaf clusters
+            for (let i = 0; i < 35; i++) {
+                const cx = ((i * 137.5 + totalTime * 12) % (W + 300)) - 150;
+                const cy = canopyBase * (0.25 + Math.sin(i * 2.7) * 0.22);
+                const rx = 50 + Math.sin(i * 1.3) * 30;
+                const ry = 25 + Math.cos(i * 0.9) * 15;
+                const g = Math.floor(40 + Math.sin(i * 0.7) * 15);
+                ctx.fillStyle = `rgb(${Math.floor(18 + Math.sin(i * 1.1) * 8)},${g + 18},${Math.floor(6 + Math.sin(i * 0.5) * 4)})`;
                 ctx.beginPath();
                 ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // Canopy bottom edge — irregular leaf fringe
-            for (let i = 0; i < 50; i++) {
-                const fx = ((i * 97.3 + totalTime * 10) % (W + 100)) - 50;
-                const fy = canopyBase + Math.sin(i * 1.7) * H * 0.03;
-                const r = 15 + Math.sin(i * 2.1) * 10;
-                ctx.fillStyle = `rgb(${20 + (i % 10)},${45 + (i % 15)},${8 + (i % 6)})`;
+            // Canopy bottom fringe
+            for (let i = 0; i < 60; i++) {
+                const fx = ((i * 79.3 + totalTime * 8) % (W + 200)) - 100;
+                const fy = canopyBase + Math.sin(i * 1.7) * H * 0.035;
+                const r = 18 + Math.sin(i * 2.1) * 12;
+                ctx.fillStyle = `rgb(${18 + (i % 10)},${42 + (i % 15)},${6 + (i % 6)})`;
                 ctx.beginPath();
-                ctx.ellipse(fx, fy, r * 1.5, r, 0, 0, Math.PI * 2);
+                ctx.ellipse(fx, fy, r * 1.8, r, 0, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // Sky holes — golden light spots through canopy
-            for (let i = 0; i < 8; i++) {
-                const sx = ((i * 211 + totalTime * 8) % (W + 100)) - 50;
-                const sy = canopyBase * (0.2 + Math.sin(i * 3.1) * 0.15);
-                const sr = 8 + Math.sin(i * 1.5 + totalTime * 0.3) * 4;
-                const alpha = 0.15 + Math.sin(totalTime * 0.5 + i * 2) * 0.08;
+            // Golden light spots through canopy
+            for (let i = 0; i < 10; i++) {
+                const sx = ((i * 211 + totalTime * 6) % (W + 200)) - 100;
+                const sy = canopyBase * (0.15 + Math.sin(i * 3.1) * 0.12);
+                const sr = 10 + Math.sin(i * 1.5 + totalTime * 0.3) * 5;
+                const alpha = 0.12 + Math.sin(totalTime * 0.5 + i * 2) * 0.06;
                 ctx.fillStyle = `rgba(255,215,0,${alpha})`;
                 ctx.beginPath();
                 ctx.arc(sx, sy, sr, 0, Math.PI * 2);
                 ctx.fill();
             }
 
-            // Far background — dark green/brown layer
-            const bgGrad = ctx.createLinearGradient(0, canopyBase, 0, H * 0.75);
-            bgGrad.addColorStop(0, '#1a3a0a');
-            bgGrad.addColorStop(0.3, '#2a4a15');
-            bgGrad.addColorStop(0.7, '#1a3008');
-            bgGrad.addColorStop(1, '#2a1a0a');
-            ctx.fillStyle = bgGrad;
-            ctx.fillRect(0, canopyBase, W, H * 0.75 - canopyBase);
+            // ===== FAR FOREST WALL behind trees =====
+            const forestGrad = ctx.createLinearGradient(0, canopyBase, 0, vpY + H * 0.15);
+            forestGrad.addColorStop(0, '#1a3a0a');
+            forestGrad.addColorStop(0.5, '#2a4a15');
+            forestGrad.addColorStop(1, '#1a3008');
+            ctx.fillStyle = forestGrad;
+            ctx.fillRect(0, canopyBase, W, vpY + H * 0.15 - canopyBase);
 
-            // Swerve offset for tree layers
-            const farSwerve = swerveAmount * W * 0.02;
-            const midSwerve = swerveAmount * W * 0.06;
-            const nearSwerve = swerveAmount * W * 0.15;
-
-            // Far trees (thin silhouette trunks, light scroll)
-            const farScroll = totalTime * 30;
-            farTrees.forEach(tr => {
-                const tx = ((tr.x * W + farScroll + farSwerve) % (W * 1.3)) - W * 0.15;
-                const tw = tr.width * W;
-                const th = tr.height * H;
-                const base = H * 0.72;
-
-                // Hazy lighter color for distance
-                const shade = Math.floor(35 + tr.shade * 20);
-                ctx.fillStyle = `rgb(${shade - 5},${shade + 15},${shade - 10})`;
-                ctx.fillRect(tx - tw / 2, base - th, tw, th);
-
-                // Faint foliage at top
-                ctx.fillStyle = `rgb(${shade + 5},${shade + 25},${shade - 5})`;
-                ctx.beginPath();
-                ctx.ellipse(tx, base - th, tw * 3, th * 0.15, 0, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Mid trees (thicker with bark detail)
-            const midScroll = totalTime * 60;
-            midTrees.forEach(tr => {
-                const tx = ((tr.x * W + midScroll + midSwerve) % (W * 1.5)) - W * 0.25;
-                const tw = tr.width * W;
-                const th = tr.height * H;
-                const base = H * 0.78;
-
-                // Bark brown color
-                const shade = Math.floor(50 + tr.shade * 25);
-                ctx.fillStyle = `rgb(${shade + 20},${shade},${shade - 20})`;
-                ctx.fillRect(tx - tw / 2, base - th, tw, th);
-
-                // Bark texture lines
-                ctx.strokeStyle = `rgba(${shade + 35},${shade + 10},${shade - 10},0.3)`;
-                ctx.lineWidth = 1;
-                for (let b = 0; b < tr.barkLines; b++) {
-                    const by = base - th + th * (b / tr.barkLines) + th * 0.1;
-                    ctx.beginPath();
-                    ctx.moveTo(tx - tw * 0.3, by);
-                    ctx.lineTo(tx + tw * 0.3, by + th * 0.08);
-                    ctx.stroke();
-                }
-
-                // Foliage canopy on mid trees
-                ctx.fillStyle = `rgb(${25 + (shade % 10)},${50 + (shade % 15)},${10 + (shade % 8)})`;
-                ctx.beginPath();
-                ctx.ellipse(tx, base - th, tw * 4, th * 0.12, 0, 0, Math.PI * 2);
-                ctx.fill();
-            });
-
-            // Ground — brown/green blur with speed lines
-            const groundTop = H * 0.72;
-            const groundGrad = ctx.createLinearGradient(0, groundTop, 0, H);
-            groundGrad.addColorStop(0, '#2a1a0a');
-            groundGrad.addColorStop(0.2, '#3a2a10');
-            groundGrad.addColorStop(0.5, '#2a1a08');
+            // ===== GROUND (perspective from horizon) =====
+            const groundGrad = ctx.createLinearGradient(0, vpY, 0, H);
+            groundGrad.addColorStop(0, '#2a3a12');
+            groundGrad.addColorStop(0.1, '#2a1a0a');
+            groundGrad.addColorStop(0.3, '#3a2a10');
+            groundGrad.addColorStop(0.6, '#2a1a08');
             groundGrad.addColorStop(1, '#1a1005');
             ctx.fillStyle = groundGrad;
-            ctx.fillRect(0, groundTop, W, H - groundTop);
+            ctx.fillRect(0, vpY, W, H - vpY);
 
-            // Speed lines on ground
-            if (state === 'playing') {
-                ctx.strokeStyle = 'rgba(80,60,30,0.3)';
-                ctx.lineWidth = 2;
-                for (let i = 0; i < 15; i++) {
-                    const ly = groundTop + (H - groundTop) * (0.05 + i * 0.065);
-                    const lx = ((i * 173 + totalTime * 400 * (0.5 + i * 0.1)) % (W + 200)) - 100;
-                    const len = 40 + i * 15;
+            // Perspective ground lines radiating from vanishing point
+            if (state === 'playing' || state === 'countdown') {
+                ctx.strokeStyle = 'rgba(60,45,20,0.25)';
+                ctx.lineWidth = 1.5;
+                for (let i = -8; i <= 8; i++) {
+                    const angle = i * 0.12;
                     ctx.beginPath();
-                    ctx.moveTo(lx, ly);
-                    ctx.lineTo(lx + len, ly);
+                    ctx.moveTo(vpX, vpY);
+                    ctx.lineTo(vpX + Math.tan(angle) * H * 1.5, H);
+                    ctx.stroke();
+                }
+                // Horizontal depth lines (closer = more spread)
+                for (let i = 1; i <= 10; i++) {
+                    const frac = i / 10;
+                    const ly = vpY + (H - vpY) * (frac * frac); // quadratic = perspective
+                    ctx.strokeStyle = `rgba(60,45,20,${0.1 + frac * 0.15})`;
+                    ctx.lineWidth = 1 + frac;
+                    ctx.beginPath();
+                    ctx.moveTo(0, ly);
+                    ctx.lineTo(W, ly);
                     ctx.stroke();
                 }
             }
 
-            // Near trees (massive trunks at edges rushing past)
-            const nearScroll = totalTime * 150;
-            nearTrees.forEach(tr => {
-                const tx = ((tr.x * W + nearScroll + nearSwerve) % (W * 1.8)) - W * 0.4;
-                const tw = tr.width * W;
-                const th = tr.height * H;
-                const base = H;
-
-                // Dark bark
-                const shade = Math.floor(40 + tr.shade * 20);
-                const trunkGrad = ctx.createLinearGradient(tx - tw / 2, 0, tx + tw / 2, 0);
-                trunkGrad.addColorStop(0, `rgb(${shade - 5},${shade - 15},${shade - 25})`);
-                trunkGrad.addColorStop(0.4, `rgb(${shade + 15},${shade},${shade - 15})`);
-                trunkGrad.addColorStop(0.6, `rgb(${shade + 10},${shade - 2},${shade - 18})`);
-                trunkGrad.addColorStop(1, `rgb(${shade - 8},${shade - 18},${shade - 28})`);
-                ctx.fillStyle = trunkGrad;
-                ctx.fillRect(tx - tw / 2, base - th, tw, th);
-
-                // Bark texture
-                ctx.strokeStyle = `rgba(${shade + 25},${shade + 5},${shade - 5},0.2)`;
-                ctx.lineWidth = 2;
-                for (let b = 0; b < 5; b++) {
-                    const by = base - th + th * (b / 5) + th * 0.05;
+            // Speed blur lines on ground (rushing toward you)
+            if (state === 'playing') {
+                for (let i = 0; i < 20; i++) {
+                    const angle = ((i * 0.314 + totalTime * 1.5) % 3.14) - 1.57;
+                    const near = 0.3 + (i % 5) * 0.12;
+                    const far = near + 0.08;
+                    const x1 = vpX + Math.sin(angle) * (H - vpY) * near * 1.8;
+                    const y1 = vpY + (H - vpY) * near;
+                    const x2 = vpX + Math.sin(angle) * (H - vpY) * far * 1.8;
+                    const y2 = vpY + (H - vpY) * far;
+                    ctx.strokeStyle = `rgba(80,60,30,${0.15 + near * 0.15})`;
+                    ctx.lineWidth = 1 + near * 2;
                     ctx.beginPath();
-                    ctx.moveTo(tx - tw * 0.35, by);
-                    ctx.quadraticCurveTo(tx, by + th * 0.04, tx + tw * 0.35, by + th * 0.02);
+                    ctx.moveTo(x1, y1);
+                    ctx.lineTo(x2, y2);
                     ctx.stroke();
+                }
+            }
+
+            // ===== 3D TREES (sorted back-to-front) =====
+            trees3d.forEach(tr => {
+                if (tr.z < TREE_NEAR || tr.z > TREE_FAR) return;
+                const scale = 1 / tr.z;
+
+                // Project tree position: x spreads from vanishing point
+                const screenX = vpX + tr.x * W * 0.35 * scale;
+                const trunkW = tr.baseWidth * W * scale;
+                const trunkH = H * 0.8 * scale;
+
+                // Tree base sits on ground — the further, the closer to horizon
+                const baseY = vpY + (H - vpY) * (1 / tr.z) * 1.8;
+                const topY = baseY - trunkH;
+
+                // Skip if off screen
+                if (screenX + trunkW < -50 || screenX - trunkW > W + 50) return;
+                if (baseY < vpY - 20) return;
+
+                // Depth-based coloring: far = hazy green, near = dark brown
+                const depthFrac = Math.min(1, (tr.z - TREE_NEAR) / (TREE_FAR - TREE_NEAR));
+                const r = Math.floor(35 + (1 - depthFrac) * 30 + tr.shade * 15);
+                const g = Math.floor(25 + depthFrac * 30 + tr.shade * 10);
+                const b = Math.floor(10 + tr.shade * 8);
+
+                // Trunk gradient (left-right lighting)
+                if (trunkW > 3) {
+                    const tGrad = ctx.createLinearGradient(screenX - trunkW / 2, 0, screenX + trunkW / 2, 0);
+                    tGrad.addColorStop(0, `rgb(${r - 10},${g - 10},${b})`);
+                    tGrad.addColorStop(0.35, `rgb(${r + 12},${g + 5},${b + 5})`);
+                    tGrad.addColorStop(0.65, `rgb(${r + 8},${g + 2},${b + 3})`);
+                    tGrad.addColorStop(1, `rgb(${r - 15},${g - 15},${b - 5})`);
+                    ctx.fillStyle = tGrad;
+                } else {
+                    ctx.fillStyle = `rgb(${r},${g},${b})`;
+                }
+
+                // Draw trunk
+                ctx.fillRect(screenX - trunkW / 2, topY, trunkW, trunkH + (H - baseY) * 0.5);
+
+                // Bark texture lines (only on close enough trees)
+                if (tr.z < 6 && trunkW > 6) {
+                    ctx.strokeStyle = `rgba(${r + 25},${g + 10},${b + 5},${0.15 + (1 - depthFrac) * 0.15})`;
+                    ctx.lineWidth = Math.max(1, trunkW * 0.04);
+                    for (let bl = 0; bl < tr.barkLines; bl++) {
+                        const by = topY + trunkH * (bl / tr.barkLines) + trunkH * 0.1;
+                        ctx.beginPath();
+                        ctx.moveTo(screenX - trunkW * 0.35, by);
+                        ctx.quadraticCurveTo(screenX, by + trunkH * 0.03, screenX + trunkW * 0.35, by + trunkH * 0.015);
+                        ctx.stroke();
+                    }
+                }
+
+                // Foliage at top of trunk
+                if (tr.hasFoliage && topY > -H * 0.5) {
+                    const fSize = trunkW * tr.foliageSize * 2.5;
+                    const fg = Math.floor(35 + depthFrac * 25 + tr.shade * 10);
+                    const fr = Math.floor(15 + tr.shade * 10);
+                    ctx.fillStyle = `rgb(${fr},${fg + 10},${Math.floor(5 + tr.shade * 5)})`;
+                    ctx.beginPath();
+                    ctx.ellipse(screenX, topY, fSize, fSize * 0.5, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    // Darker inner foliage
+                    ctx.fillStyle = `rgb(${fr - 5},${fg},${Math.floor(3 + tr.shade * 3)})`;
+                    ctx.beginPath();
+                    ctx.ellipse(screenX - fSize * 0.15, topY + fSize * 0.1, fSize * 0.6, fSize * 0.35, 0, 0, Math.PI * 2);
+                    ctx.fill();
                 }
             });
 
-            // Light shafts — golden beams angling through
-            lightShafts.forEach(ls => {
-                const lx = ((ls.x * W + totalTime * ls.speed * 100) % (W * 1.2)) - W * 0.1;
-                const alpha = ls.alpha * (0.7 + Math.sin(totalTime * 0.4 + ls.x * 5) * 0.3);
+            // ===== LIGHT SHAFTS (golden beams) =====
+            for (let i = 0; i < 4; i++) {
+                const lx = ((i * 311 + totalTime * 15) % (W + 200)) - 100;
+                const alpha = 0.03 + Math.sin(totalTime * 0.3 + i * 1.7) * 0.015;
+                const w = 30 + Math.sin(i * 2.3) * 15;
                 ctx.save();
                 ctx.globalAlpha = alpha;
                 ctx.fillStyle = '#ffd700';
                 ctx.beginPath();
                 ctx.moveTo(lx, 0);
-                ctx.lineTo(lx + ls.width * W, 0);
-                ctx.lineTo(lx + ls.width * W * 2.5, H * 0.75);
-                ctx.lineTo(lx + ls.width * W * 1.5, H * 0.75);
+                ctx.lineTo(lx + w, 0);
+                ctx.lineTo(lx + w * 3, H * 0.8);
+                ctx.lineTo(lx + w * 2, H * 0.8);
                 ctx.closePath();
                 ctx.fill();
                 ctx.restore();
-            });
+            }
         }
 
         // ===== SCOUT TROOPER SPEEDER BIKE =====
@@ -1285,9 +1302,9 @@
             crossX = Math.max(0.05, Math.min(0.95, crossX));
             crossY = Math.max(0.05, Math.min(0.95, crossY));
 
-            // Camera pans
-            const targetCamX = (crossX - 0.5) * 0.6;
-            const targetCamY = (crossY - 0.5) * 0.6;
+            // Camera pans (subtle — open air, no cockpit blocking view)
+            const targetCamX = (crossX - 0.5) * 0.12;
+            const targetCamY = (crossY - 0.5) * 0.08;
             const camSmooth = Math.min(1, dt * 5);
             camX += (targetCamX - camX) * camSmooth;
             camY += (targetCamY - camY) * camSmooth;
@@ -1411,17 +1428,17 @@
         function draw(dt) {
             ctx.clearRect(0, 0, W, H);
 
-            // Camera pan offset
+            // Camera pan offset (small)
             const camPxX = -camX * W;
             const camPxY = -camY * H;
 
+            // Forest draws full-screen (no translate — it handles its own projection)
             ctx.save();
-            ctx.translate(shakeX + camPxX, shakeY + camPxY);
-
+            ctx.translate(shakeX, shakeY);
             drawEndorForest(dt);
+            ctx.restore();
 
             if (state === 'victory') {
-                ctx.restore();
                 drawSpeederBike();
                 ctx.save();
                 ctx.translate(shakeX + camPxX, shakeY + camPxY);
@@ -1441,6 +1458,8 @@
 
             allObjects.sort((a, b) => b.z - a.z);
 
+            ctx.save();
+            ctx.translate(shakeX + camPxX, shakeY + camPxY);
             allObjects.forEach(o => {
                 if (o.type === 'enemy') drawScoutBike(o.obj);
                 else if (o.type === 'plaser') drawPlayerLaser(o.obj);
@@ -1448,7 +1467,6 @@
                 else if (o.type === 'explosion') drawExplosion(o.obj);
                 else if (o.type === 'debris') drawDebris(o.obj);
             });
-
             ctx.restore();
 
             // Speeder bike HUD always on top
@@ -1459,8 +1477,8 @@
             if (state === 'countdown') {
                 drawCountdown();
             }
-
             ctx.restore();
+
             if (state === 'playing') {
                 ctx.save();
                 ctx.translate(shakeX + camPxX, shakeY + camPxY);
