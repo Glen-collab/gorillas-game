@@ -320,33 +320,34 @@
         // ===== DRAWING =====
 
         function drawHothBackground(dt) {
-            // Icy sky gradient
-            const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.6);
+            // Icy sky gradient - horizon at 35% so we see more ground
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.38);
             skyGrad.addColorStop(0, '#8aaace');
-            skyGrad.addColorStop(0.5, '#c8d8e8');
+            skyGrad.addColorStop(0.6, '#c8d8e8');
             skyGrad.addColorStop(1, '#e8eef4');
             ctx.fillStyle = skyGrad;
-            ctx.fillRect(0, 0, W, H * 0.6);
+            ctx.fillRect(0, 0, W, H * 0.38);
 
-            // Snow ground
-            const groundGrad = ctx.createLinearGradient(0, H * 0.55, 0, H);
+            // Snow ground - starts at horizon
+            const groundGrad = ctx.createLinearGradient(0, H * 0.35, 0, H);
             groundGrad.addColorStop(0, '#e0e8f0');
-            groundGrad.addColorStop(0.3, '#d0dce8');
+            groundGrad.addColorStop(0.2, '#d8e2ec');
+            groundGrad.addColorStop(0.5, '#d0dce8');
             groundGrad.addColorStop(1, '#b8c8d8');
             ctx.fillStyle = groundGrad;
-            ctx.fillRect(0, H * 0.55, W, H * 0.45);
+            ctx.fillRect(0, H * 0.35, W, H * 0.65);
 
             // Horizon haze
             ctx.fillStyle = 'rgba(200, 215, 230, 0.4)';
-            ctx.fillRect(0, H * 0.52, W, H * 0.08);
+            ctx.fillRect(0, H * 0.32, W, H * 0.08);
 
-            // Far mountains (lighter blue-white)
+            // Far mountains (lighter blue-white) - sit at horizon
             ctx.fillStyle = '#c8d4e0';
             mountainsFar.forEach(m => {
                 const mx = m.x * W;
                 const mw = m.width * W;
-                const base = H * 0.55;
-                const peak = base - m.peak * H;
+                const base = H * 0.38;
+                const peak = base - m.peak * H * 0.6;
                 ctx.beginPath();
                 ctx.moveTo(mx - mw * 0.5, base);
                 ctx.lineTo(mx - mw * 0.1, peak + H * 0.04);
@@ -362,8 +363,8 @@
             mountainsFar.forEach(m => {
                 const mx = m.x * W;
                 const mw = m.width * W;
-                const base = H * 0.55;
-                const peak = base - m.peak * H;
+                const base = H * 0.38;
+                const peak = base - m.peak * H * 0.6;
                 ctx.beginPath();
                 ctx.moveTo(mx - mw * 0.08, peak + H * 0.025);
                 ctx.lineTo(mx, peak);
@@ -379,8 +380,8 @@
             mountains.forEach(m => {
                 const mx = m.x * W;
                 const mw = m.width * W;
-                const base = H * 0.57;
-                const peak = base - m.peak * H;
+                const base = H * 0.40;
+                const peak = base - m.peak * H * 0.55;
                 ctx.beginPath();
                 ctx.moveTo(mx - mw * 0.5, base);
                 ctx.lineTo(mx - mw * 0.15, peak + H * 0.05);
@@ -397,8 +398,8 @@
             mountains.forEach(m => {
                 const mx = m.x * W;
                 const mw = m.width * W;
-                const base = H * 0.57;
-                const peak = base - m.peak * H;
+                const base = H * 0.40;
+                const peak = base - m.peak * H * 0.55;
                 ctx.beginPath();
                 ctx.moveTo(mx - mw * 0.06, peak + H * 0.015);
                 ctx.lineTo(mx, peak);
@@ -1842,9 +1843,28 @@
         function draw(dt) {
             ctx.clearRect(0, 0, W, H);
 
+            // Fill cockpit area black first so nothing shows through
+            ctx.fillStyle = '#0a0a12';
+            ctx.fillRect(0, H * 0.62, W, H * 0.38);
+
             // Camera pan offset
             const camPxX = -camX * W;
             const camPxY = -camY * H;
+
+            // Clip viewport to canopy opening so background doesn't bleed into cockpit
+            ctx.save();
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(W, 0);
+            ctx.lineTo(W, H * 0.68);
+            ctx.lineTo(W * 0.72, H * 0.64);
+            ctx.lineTo(W * 0.62, H * 0.64);
+            ctx.lineTo(W * 0.50, H * 0.60);
+            ctx.lineTo(W * 0.38, H * 0.64);
+            ctx.lineTo(W * 0.28, H * 0.64);
+            ctx.lineTo(0, H * 0.68);
+            ctx.closePath();
+            ctx.clip();
 
             ctx.save();
             ctx.translate(shakeX + camPxX, shakeY + camPxY);
@@ -1852,7 +1872,8 @@
             drawHothBackground(dt);
 
             if (state === 'victory') {
-                ctx.restore();
+                ctx.restore(); // undo translate
+                ctx.restore(); // undo clip
                 drawCockpit();
                 ctx.save();
                 ctx.translate(shakeX + camPxX, shakeY + camPxY);
@@ -1883,7 +1904,8 @@
                 else if (o.type === 'debris') drawDebris(o.obj);
             });
 
-            ctx.restore();
+            ctx.restore(); // undo translate
+            ctx.restore(); // undo viewport clip
 
             // Cockpit always on top
             ctx.save();
