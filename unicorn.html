@@ -309,7 +309,7 @@
         const MAX_WAVES = 9;
         let W, H;
         let state = 'start';
-        let score = 0, lives = 4, wave = 1;
+        let score = 0, lives = 5, wave = 1;
         let enemies = [], explosions = [], hornBlasts = [], enemyProj = [], particles = [];
         let crossX = 0.5, crossY = 0.4;
         let keys = {};
@@ -1313,10 +1313,10 @@
         // ===== LOGIC =====
         function getWaveConfig(w) {
             return {
-                target: 5 + w * 2,
-                spawnInt: Math.max(1100 - w * 90, 350),
-                maxOn: Math.min(4 + w, 12),
-                trollChance: Math.min(0.3 + w * 0.04, 0.6),
+                target: 4 + w * 2,
+                spawnInt: Math.max(1600 - w * 100, 500),
+                maxOn: Math.min(3 + w, 10),
+                trollChance: Math.min(0.25 + w * 0.04, 0.55),
             };
         }
 
@@ -1335,7 +1335,7 @@
                     type: 'troll', side: slot.side,
                     alive: true, t: 0,
                     life: 8000 + Math.random() * 4000 + wave * 800,
-                    shootCD: 1000 + Math.random() * 1500,
+                    shootCD: 1800 + Math.random() * 2000,
                     flash: 0, dir: 1, range: 0.01, spd: 0.3,
                     hp: wave >= 6 ? 2 : 1,
                 });
@@ -1350,7 +1350,7 @@
                     type: 'gremlin',
                     alive: true, t: 0,
                     life: 6000 + Math.random() * 4000 + wave * 600,
-                    shootCD: 700 + Math.random() * 1200,
+                    shootCD: 1500 + Math.random() * 1800,
                     flash: 0, dir: Math.random() > 0.5 ? 1 : -1,
                     range: 0.02 + Math.random() * 0.02,
                     spd: 0.3 + Math.random() * 0.4,
@@ -1503,16 +1503,16 @@
                 if (e.shootCD <= 0) {
                     e.flash = 150;
                     if (e.type === 'troll') {
-                        e.shootCD = Math.max(800, 1800 - wave * 100) + Math.random() * 1000;
+                        e.shootCD = Math.max(1400, 2800 - wave * 120) + Math.random() * 1200;
                         sfx.play('troll_throw');
                     } else {
-                        e.shootCD = Math.max(500, 1400 - wave * 80) + Math.random() * 800;
+                        e.shootCD = Math.max(1100, 2400 - wave * 100) + Math.random() * 1000;
                         sfx.play('gremlin_spit');
                     }
                     const dx = 0.5 - e.x + (Math.random() - 0.5) * 0.12;
                     const dy = 0.85 - e.y;
                     const d = Math.sqrt(dx * dx + dy * dy);
-                    const bspd = e.type === 'troll' ? (0.4 + wave * 0.03) : (0.5 + wave * 0.04);
+                    const bspd = e.type === 'troll' ? (0.25 + wave * 0.02) : (0.3 + wave * 0.025);
                     enemyProj.push({
                         x: e.x, y: e.y + 0.02,
                         vx: (dx / d) * bspd, vy: (dy / d) * bspd,
@@ -1599,7 +1599,7 @@
         }
 
         function startGame() {
-            score = 0; lives = 4; wave = 1;
+            score = 0; lives = 5; wave = 1;
             enemies = []; explosions = []; hornBlasts = []; enemyProj = []; particles = [];
             crossX = 0.5; crossY = 0.4; hornAngle = 0; gallopPhase = 0;
             initDecor(); updateHUD();
