@@ -694,7 +694,7 @@
             const scale = 1 / depth;
             const sx = (e.x - 0.5) * W * scale + W * 0.5;
             const sy = (e.y - 0.5) * H * scale + H * 0.5;
-            const sz = Math.min(W, H) * 0.055 * scale;
+            const sz = Math.min(W, H) * 0.11 * scale;
 
             if (sz < 2 || sx < -100 || sx > W + 100 || sy < -100 || sy > H + 100) return;
             e.screenX = sx; e.screenY = sy; e.screenSize = sz;
@@ -801,9 +801,9 @@
             if (atatApproach <= 0) return;
             const p = Math.min(atatApproach, 1);
             const scale = 0.06 + p * 0.35;
-            const cx = W * 0.35, cy = H * 0.32 + p * H * 0.04;
+            const cx = W * 0.35, cy = H * 0.28 + p * H * 0.10;
             const sw = W * scale, sh = sw * 0.6;
-            const alpha = Math.min(1, p * 2.5) * 0.7;
+            const alpha = Math.min(1, p * 1.5) * 0.95;
             const legPhase = atatLegPhase;
 
             ctx.save();
