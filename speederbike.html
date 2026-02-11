@@ -1,0 +1,1369 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>SPEEDER BIKE CHASE — ENDOR</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #000;
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            user-select: none;
+            -webkit-user-select: none;
+            touch-action: none;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+            cursor: none;
+        }
+
+        .overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 80;
+            pointer-events: auto;
+            cursor: pointer;
+            background: radial-gradient(ellipse at center, rgba(0, 20, 0, 0.7), rgba(0, 0, 0, 0.95));
+        }
+
+        .overlay-text {
+            color: #80ff40;
+            text-align: center;
+            text-shadow: 0 0 15px rgba(80, 255, 40, 0.5);
+        }
+
+        .overlay-text .big {
+            font-size: 14px;
+            display: block;
+            margin-bottom: 16px;
+            letter-spacing: 3px;
+        }
+
+        .overlay-text .med {
+            font-size: 9px;
+            display: block;
+            margin-bottom: 10px;
+            color: #ffcc40;
+        }
+
+        .overlay-text .small {
+            font-size: 8px;
+            display: block;
+            opacity: 0.8;
+            color: #80ff80;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+
+            0%,
+            49% {
+                opacity: 0.8
+            }
+
+            50%,
+            100% {
+                opacity: 0.2
+            }
+        }
+
+        @media (min-width:600px) {
+            .overlay-text .big {
+                font-size: 22px;
+            }
+        }
+        #exitBtn{position:fixed;top:10px;right:10px;z-index:100;font-family:'Press Start 2P',monospace;font-size:9px;color:#999;text-decoration:none;background:rgba(0,0,0,0.7);padding:6px 12px;border:1px solid #555;border-radius:2px;cursor:pointer;transition:all 0.15s}
+        #exitBtn:hover{border-color:#80ff40;color:#80ff40;background:rgba(0,20,0,0.8)}
+    </style>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+
+    <div class="overlay" id="startOverlay">
+        <div class="overlay-text">
+            <span class="big">✦ SPEEDER BIKE CHASE ✦</span>
+            <span class="med">THE FOREST MOON OF ENDOR</span>
+            <span class="med" style="color:#ff8040">PURSUE THE IMPERIAL SCOUTS</span>
+            <span class="small">► CLICK OR PRESS ENTER ◄</span>
+            <br><a href="Index.html" style="font-family:'Press Start 2P',monospace;font-size:8px;color:#ff0;text-decoration:none;background:rgba(0,0,0,0.6);padding:6px 10px;border:1px solid #ff0;border-radius:3px">&#9664; ARCADE</a>
+        </div>
+    </div>
+
+    <div class="overlay" id="gameOverOverlay" style="display:none;">
+        <div class="overlay-text">
+            <span class="big" style="color:#ff2020">SPEEDER DESTROYED</span>
+            <span class="med" id="finalScore"></span>
+            <span class="small">► CLICK OR PRESS ENTER ◄</span>
+            <br><a href="Index.html" style="font-family:'Press Start 2P',monospace;font-size:8px;color:#ff0;text-decoration:none;background:rgba(0,0,0,0.6);padding:6px 10px;border:1px solid #ff0;border-radius:3px">&#9664; ARCADE</a>
+        </div>
+    </div>
+
+    <div class="overlay" id="winOverlay" style="display:none;background:transparent;"><div style="position:absolute;bottom:15%;left:50%;transform:translateX(-50%)"><a href="Index.html" style="font-family:'Press Start 2P',monospace;font-size:8px;color:#ff0;text-decoration:none;background:rgba(0,0,0,0.6);padding:6px 10px;border:1px solid #ff0;border-radius:3px">&#9664; ARCADE</a></div></div>
+
+    <a id="exitBtn" href="Index.html">&#10005; EXIT</a>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+
+        // ===== AUDIO =====
+        class SFX {
+            constructor() { this.ctx = null; }
+            init() {
+                if (this.ctx) return;
+                try { this.ctx = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) { }
+            }
+            play(type) {
+                if (!this.ctx) return;
+                const t = this.ctx.currentTime;
+                const osc = () => this.ctx.createOscillator();
+                const gn = () => this.ctx.createGain();
+
+                if (type === 'laser') {
+                    [0, 0.04].forEach((d, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'square'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(900 - i * 100, t + d);
+                        o.frequency.exponentialRampToValueAtTime(200, t + d + 0.06);
+                        g.gain.setValueAtTime(0.05, t + d);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + d + 0.06);
+                        o.start(t + d); o.stop(t + d + 0.07);
+                    });
+                }
+                if (type === 'explode') {
+                    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.6, this.ctx.sampleRate);
+                    const d = buf.getChannelData(0);
+                    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 0.5);
+                    const src = this.ctx.createBufferSource(), g = gn();
+                    src.buffer = buf; src.connect(g); g.connect(this.ctx.destination);
+                    g.gain.setValueAtTime(0.2, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.6);
+                    src.start(t);
+                    const o = osc(), g2 = gn();
+                    o.type = 'sine'; o.connect(g2); g2.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(150, t);
+                    o.frequency.exponentialRampToValueAtTime(25, t + 0.5);
+                    g2.gain.setValueAtTime(0.12, t);
+                    g2.gain.exponentialRampToValueAtTime(0.001, t + 0.5);
+                    o.start(t); o.stop(t + 0.5);
+                }
+                if (type === 'hit') {
+                    const buf = this.ctx.createBuffer(1, this.ctx.sampleRate * 0.15, this.ctx.sampleRate);
+                    const d = buf.getChannelData(0);
+                    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 1.5);
+                    const src = this.ctx.createBufferSource(), g = gn();
+                    src.buffer = buf; src.connect(g); g.connect(this.ctx.destination);
+                    g.gain.setValueAtTime(0.12, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    src.start(t);
+                }
+                if (type === 'engine') {
+                    // Speeder whine - continuous-ish
+                    const o = osc(), g = gn();
+                    o.type = 'sawtooth'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(80 + Math.random() * 20, t);
+                    o.frequency.linearRampToValueAtTime(90 + Math.random() * 30, t + 0.15);
+                    g.gain.setValueAtTime(0.015, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.15);
+                    o.start(t); o.stop(t + 0.15);
+                }
+                if (type === 'countdown') {
+                    const o = osc(), g = gn();
+                    o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                    o.frequency.setValueAtTime(600, t);
+                    g.gain.setValueAtTime(0.04, t);
+                    g.gain.exponentialRampToValueAtTime(0.001, t + 0.07);
+                    o.start(t); o.stop(t + 0.07);
+                }
+                if (type === 'go') {
+                    [800, 1000, 1200].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'sine'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.06);
+                        g.gain.setValueAtTime(0.04, t + i * 0.06);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.06 + 0.07);
+                        o.start(t + i * 0.06); o.stop(t + i * 0.06 + 0.07);
+                    });
+                }
+                if (type === 'gameover') {
+                    [300, 250, 200, 150, 100].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.3);
+                        g.gain.setValueAtTime(0.06, t + i * 0.3);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.3 + 0.29);
+                        o.start(t + i * 0.3); o.stop(t + i * 0.3 + 0.3);
+                    });
+                }
+                if (type === 'victory') {
+                    [392, 523, 659, 784, 659, 784, 1047].forEach((f, i) => {
+                        const o = osc(), g = gn();
+                        o.type = i < 4 ? 'sine' : 'triangle'; o.connect(g); g.connect(this.ctx.destination);
+                        o.frequency.setValueAtTime(f, t + i * 0.2);
+                        g.gain.setValueAtTime(0.06, t + i * 0.2);
+                        g.gain.exponentialRampToValueAtTime(0.001, t + i * 0.2 + 0.19);
+                        o.start(t + i * 0.2); o.stop(t + i * 0.2 + 0.2);
+                    });
+                }
+            }
+        }
+
+        const sfx = new SFX();
+        const MAX_WAVES = 9;
+        let W, H;
+        let state = 'start';
+        let score = 0, shields = 100, wave = 1;
+        let crossX = 0.5, crossY = 0.35;
+        let camX = 0, camY = 0;
+        let keys = {};
+        let killed = 0, waveTarget = 6;
+        let lastTime = 0, gameTime = 0;
+        let shakeX = 0, shakeY = 0, shakeTimer = 0;
+        let dmgFlash = 0, gunFlash = 0;
+        let engineTimer = 0;
+
+        // Game objects
+        let trees = [];
+        let enemies = [];
+        let playerLasers = [];
+        let enemyLasers = [];
+        let explosions = [];
+        let debris = [];
+        let groundFerns = [];
+
+        // Spawn
+        let spawnTimer = 0, spawnInterval = 2000, maxOnScreen = 4;
+
+        // Countdown
+        let countdownPhase = 0, countdownTimer = 0;
+        const CD_DUR = [800, 700, 700, 700, 700, 400];
+        const CD_TEXT = ['', 'FULL THROTTLE', '3', '2', '1', 'PUNCH IT!'];
+        let victoryTimer = 0;
+
+        // Speed effect
+        let speed = 1.0;
+
+        function resize() {
+            W = canvas.width = window.innerWidth * 2;
+            H = canvas.height = window.innerHeight * 2;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // ===== TREES (infinite scrolling forest) =====
+        function initTrees() {
+            trees = [];
+            for (let i = 0; i < 60; i++) {
+                trees.push(makeTree(Math.random() * 5 + 0.5));
+            }
+        }
+
+        function makeTree(z) {
+            // Trees on left or right side of path
+            const side = Math.random() < 0.5 ? -1 : 1;
+            const offset = 0.15 + Math.random() * 0.6; // distance from center
+            return {
+                x: side * offset,
+                z: z,
+                width: 0.04 + Math.random() * 0.03,
+                height: 1.5 + Math.random() * 1.5,
+                shade: Math.random() * 0.3, // color variation
+                hasCanopy: Math.random() > 0.2,
+                canopySize: 0.8 + Math.random() * 0.6,
+                knots: Math.random() > 0.5 ? [Math.random() * 0.6 + 0.2, Math.random() * 0.4 + 0.3] : [],
+            };
+        }
+
+        function initFerns() {
+            groundFerns = [];
+            for (let i = 0; i < 40; i++) {
+                groundFerns.push({
+                    x: (Math.random() - 0.5) * 1.6,
+                    z: Math.random() * 4 + 0.3,
+                    size: 0.02 + Math.random() * 0.03,
+                    type: Math.floor(Math.random() * 3),
+                });
+            }
+        }
+
+        // ===== DRAWING =====
+
+        function project(x, y, z) {
+            if (z < 0.05) z = 0.05;
+            const scale = 1 / z;
+            return {
+                sx: (x) * W * scale + W * 0.5,
+                sy: (y) * H * scale + H * 0.5,
+                scale: scale
+            };
+        }
+
+        function drawSky() {
+            // Forest canopy sky - bright at horizon, darker up top
+            const skyGrad = ctx.createLinearGradient(0, 0, 0, H * 0.45);
+            skyGrad.addColorStop(0, '#1a3a1a');
+            skyGrad.addColorStop(0.4, '#2a5a2a');
+            skyGrad.addColorStop(0.7, '#4a7a3a');
+            skyGrad.addColorStop(1, '#8aaa60');
+            ctx.fillStyle = skyGrad;
+            ctx.fillRect(0, 0, W, H * 0.5);
+
+            // Filtered light through canopy
+            const t = gameTime;
+            for (let i = 0; i < 8; i++) {
+                const lx = W * (0.1 + Math.sin(t * 0.3 + i * 1.5) * 0.05 + i * 0.11);
+                const ly = H * (0.05 + i * 0.04);
+                const lr = H * (0.03 + Math.sin(t * 0.5 + i) * 0.01);
+                ctx.fillStyle = `rgba(200,220,140,${0.05 + Math.sin(t + i) * 0.02})`;
+                ctx.beginPath();
+                ctx.arc(lx, ly, lr, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawGround() {
+            // Forest floor
+            const horizonY = H * 0.48;
+            const groundGrad = ctx.createLinearGradient(0, horizonY, 0, H);
+            groundGrad.addColorStop(0, '#3a5a20');
+            groundGrad.addColorStop(0.1, '#2a4a15');
+            groundGrad.addColorStop(0.4, '#1a3510');
+            groundGrad.addColorStop(1, '#0a1a05');
+            ctx.fillStyle = groundGrad;
+            ctx.fillRect(0, horizonY, W, H - horizonY);
+
+            // Path / trail
+            const pathW = W * 0.15;
+            ctx.fillStyle = '#4a3a20';
+            ctx.beginPath();
+            ctx.moveTo(W * 0.5 - pathW, H);
+            ctx.lineTo(W * 0.5 + pathW, H);
+            ctx.lineTo(W * 0.5 + 2, horizonY);
+            ctx.lineTo(W * 0.5 - 2, horizonY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Path texture lines (speed lines)
+            const t = gameTime * speed * 3;
+            ctx.strokeStyle = 'rgba(60,45,25,0.5)';
+            ctx.lineWidth = 1;
+            for (let i = 0; i < 12; i++) {
+                const zPos = ((t * 0.5 + i * 0.35) % 4.0) + 0.2;
+                const p = project(0, 0.35, zPos);
+                if (p.sy < horizonY || p.sy > H) continue;
+                const pw = pathW * (p.sy - horizonY) / (H - horizonY);
+                ctx.beginPath();
+                ctx.moveTo(W * 0.5 - pw, p.sy);
+                ctx.lineTo(W * 0.5 + pw, p.sy);
+                ctx.stroke();
+            }
+
+            // Moss/grass at path edges
+            ctx.strokeStyle = '#2a5515';
+            ctx.lineWidth = 2;
+            for (let i = 0; i < 20; i++) {
+                const zPos = ((t * 0.5 + i * 0.22) % 4.0) + 0.2;
+                const p = project(0, 0.35, zPos);
+                if (p.sy < horizonY || p.sy > H) continue;
+                const pw = pathW * (p.sy - horizonY) / (H - horizonY);
+                [-1, 1].forEach(side => {
+                    const bx = W * 0.5 + side * (pw + 3);
+                    ctx.beginPath();
+                    ctx.moveTo(bx, p.sy);
+                    ctx.lineTo(bx + side * 4, p.sy - 4);
+                    ctx.stroke();
+                });
+            }
+        }
+
+        function drawTree(tree) {
+            const z = tree.z;
+            if (z < 0.1 || z > 6) return;
+
+            const scale = 1 / z;
+            const baseX = tree.x * W * scale + W * 0.5;
+            const baseY = H * 0.5 + 0.35 * H * scale; // ground level
+            const trunkW = tree.width * W * scale;
+            const trunkH = tree.height * H * scale;
+
+            if (baseX < -trunkW * 3 || baseX > W + trunkW * 3) return;
+            if (trunkW < 1) return;
+
+            // Trunk
+            const shade = tree.shade;
+            const r = Math.floor(120 + shade * 40);
+            const g = Math.floor(60 + shade * 20);
+            const b = Math.floor(35 + shade * 15);
+
+            // Trunk gradient (lighter on one side)
+            const tGrad = ctx.createLinearGradient(baseX - trunkW, 0, baseX + trunkW, 0);
+            tGrad.addColorStop(0, `rgb(${r - 30},${g - 15},${b - 10})`);
+            tGrad.addColorStop(0.3, `rgb(${r},${g},${b})`);
+            tGrad.addColorStop(0.7, `rgb(${r + 15},${g + 10},${b + 5})`);
+            tGrad.addColorStop(1, `rgb(${r - 20},${g - 10},${b - 5})`);
+
+            ctx.fillStyle = tGrad;
+            // Trunk with flared base
+            ctx.beginPath();
+            ctx.moveTo(baseX - trunkW * 1.5, baseY);
+            ctx.quadraticCurveTo(baseX - trunkW * 1.2, baseY - trunkH * 0.1, baseX - trunkW * 0.5, baseY - trunkH * 0.15);
+            ctx.lineTo(baseX - trunkW * 0.45, baseY - trunkH);
+            ctx.lineTo(baseX + trunkW * 0.45, baseY - trunkH);
+            ctx.lineTo(baseX + trunkW * 0.5, baseY - trunkH * 0.15);
+            ctx.quadraticCurveTo(baseX + trunkW * 1.2, baseY - trunkH * 0.1, baseX + trunkW * 1.5, baseY);
+            ctx.closePath();
+            ctx.fill();
+
+            // Bark texture (vertical lines)
+            ctx.strokeStyle = `rgba(${r - 40},${g - 20},${b - 15},0.4)`;
+            ctx.lineWidth = Math.max(1, trunkW * 0.05);
+            for (let i = 0; i < 5; i++) {
+                const lx = baseX + (i - 2) * trunkW * 0.18;
+                ctx.beginPath();
+                ctx.moveTo(lx, baseY - trunkH * 0.05);
+                ctx.lineTo(lx + (Math.random() - 0.5) * 2, baseY - trunkH * 0.9);
+                ctx.stroke();
+            }
+
+            // Knots
+            tree.knots.forEach(ky => {
+                const knotY = baseY - trunkH * ky;
+                ctx.fillStyle = `rgb(${r - 25},${g - 15},${b - 10})`;
+                ctx.beginPath();
+                ctx.ellipse(baseX, knotY, trunkW * 0.2, trunkW * 0.3, 0, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            // Canopy/branches
+            if (tree.hasCanopy && z < 4) {
+                const canopyR = trunkW * tree.canopySize * 4;
+                const canopyY = baseY - trunkH * 0.85;
+
+                // Multiple layers of foliage
+                for (let layer = 0; layer < 3; layer++) {
+                    const ly = canopyY - layer * canopyR * 0.3;
+                    const lr = canopyR * (1.2 - layer * 0.15);
+                    const darkG = Math.floor(40 + shade * 30 + layer * 15);
+                    const darkR = Math.floor(20 + shade * 10);
+
+                    ctx.fillStyle = `rgba(${darkR},${darkG + 30},${darkR + 10},${0.7 - layer * 0.1})`;
+                    ctx.beginPath();
+                    // Spiky conifer shape
+                    const spikes = 6 + Math.floor(Math.random() * 4);
+                    for (let s = 0; s < spikes * 2; s++) {
+                        const angle = (s / (spikes * 2)) * Math.PI * 2 - Math.PI / 2;
+                        const r2 = s % 2 === 0 ? lr : lr * 0.6;
+                        ctx.lineTo(
+                            baseX + Math.cos(angle) * r2,
+                            ly + Math.sin(angle) * r2 * 0.5
+                        );
+                    }
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                // Drooping branches
+                if (z < 2.5) {
+                    ctx.strokeStyle = `rgba(30,${60 + shade * 30},25,0.5)`;
+                    ctx.lineWidth = Math.max(1, trunkW * 0.08);
+                    [-1, 1].forEach(side => {
+                        for (let b = 0; b < 2; b++) {
+                            const by = baseY - trunkH * (0.5 + b * 0.25);
+                            const bLen = trunkW * (2 + b);
+                            ctx.beginPath();
+                            ctx.moveTo(baseX, by);
+                            ctx.quadraticCurveTo(
+                                baseX + side * bLen * 0.6, by - bLen * 0.1,
+                                baseX + side * bLen, by + bLen * 0.3
+                            );
+                            ctx.stroke();
+                        }
+                    });
+                }
+            }
+
+            // Roots at base
+            if (z < 2) {
+                ctx.fillStyle = `rgb(${r - 15},${g - 10},${b - 5})`;
+                [-1, 1].forEach(side => {
+                    ctx.beginPath();
+                    ctx.moveTo(baseX + side * trunkW * 0.5, baseY);
+                    ctx.quadraticCurveTo(
+                        baseX + side * trunkW * 2, baseY + trunkW * 0.2,
+                        baseX + side * trunkW * 2.5, baseY + trunkW * 0.5
+                    );
+                    ctx.lineTo(baseX + side * trunkW * 2.3, baseY + trunkW * 0.8);
+                    ctx.quadraticCurveTo(
+                        baseX + side * trunkW * 1.5, baseY + trunkW * 0.3,
+                        baseX + side * trunkW * 0.3, baseY + trunkW * 0.1
+                    );
+                    ctx.closePath();
+                    ctx.fill();
+                });
+            }
+        }
+
+        function drawFern(f) {
+            if (f.z < 0.2 || f.z > 4) return;
+            const p = project(f.x, 0.35, f.z);
+            if (p.sy < H * 0.48 || p.sx < -50 || p.sx > W + 50) return;
+            const sz = f.size * W * p.scale;
+            if (sz < 2) return;
+
+            ctx.fillStyle = `rgba(40,${80 + f.type * 20},30,0.7)`;
+            // Simple fern frond
+            ctx.beginPath();
+            ctx.moveTo(p.sx, p.sy);
+            ctx.lineTo(p.sx - sz, p.sy - sz * 1.5);
+            ctx.lineTo(p.sx - sz * 0.3, p.sy - sz * 0.5);
+            ctx.lineTo(p.sx + sz * 0.3, p.sy - sz * 0.5);
+            ctx.lineTo(p.sx + sz, p.sy - sz * 1.5);
+            ctx.closePath();
+            ctx.fill();
+        }
+
+        // ===== SCOUT TROOPER ON SPEEDER BIKE (16-bit style) =====
+        function drawScoutTrooper(e) {
+            const z = e.z;
+            if (z < 0.15 || z > 7) return;
+
+            const scale = 1 / z;
+            const sx = (e.x) * W * scale + W * 0.5;
+            const sy = (e.y) * H * scale + H * 0.5;
+            const sz = Math.min(W, H) * 0.035 * scale;
+
+            if (sz < 3 || sx < -100 || sx > W + 100) return;
+
+            e.screenX = sx; e.screenY = sy; e.screenSize = sz;
+            const flash = e.flash > 0;
+
+            // Determine facing based on lateral velocity
+            const facing = Math.max(-1, Math.min(1, (e.vx || 0) * 4));
+
+            ctx.save();
+            ctx.translate(sx, sy);
+
+            // === SPEEDER BIKE ===
+            const bikeLen = sz * 3.5;
+            const bikeH = sz * 0.4;
+
+            // Perspective skew for lateral movement
+            const skew = facing * 0.2;
+            ctx.transform(1, skew, 0, 1, 0, 0);
+
+            // Engine exhaust glow
+            ctx.fillStyle = `rgba(100,150,255,${0.3 + Math.sin(gameTime * 20) * 0.1})`;
+            ctx.beginPath();
+            ctx.ellipse(bikeLen * 0.45, bikeH * 0.2, sz * 0.2, sz * 0.5, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Main bike body
+            const bikeGrad = ctx.createLinearGradient(0, -bikeH, 0, bikeH);
+            bikeGrad.addColorStop(0, flash ? '#8a7a6a' : '#5a4a3a');
+            bikeGrad.addColorStop(0.5, flash ? '#7a6a5a' : '#4a3a2a');
+            bikeGrad.addColorStop(1, flash ? '#6a5a4a' : '#3a2a1a');
+            ctx.fillStyle = bikeGrad;
+
+            // Bike shape - elongated
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.5, 0);  // nose
+            ctx.lineTo(-bikeLen * 0.3, -bikeH);
+            ctx.lineTo(bikeLen * 0.3, -bikeH * 0.8);
+            ctx.lineTo(bikeLen * 0.5, -bikeH * 0.3);
+            ctx.lineTo(bikeLen * 0.5, bikeH * 0.3);
+            ctx.lineTo(bikeLen * 0.3, bikeH * 0.8);
+            ctx.lineTo(-bikeLen * 0.3, bikeH);
+            ctx.closePath();
+            ctx.fill();
+
+            // Bike front vanes/fins
+            ctx.fillStyle = flash ? '#6a6a6a' : '#3a3a3a';
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.5, 0);
+            ctx.lineTo(-bikeLen * 0.55, -bikeH * 1.5);
+            ctx.lineTo(-bikeLen * 0.35, -bikeH * 0.8);
+            ctx.closePath();
+            ctx.fill();
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.5, 0);
+            ctx.lineTo(-bikeLen * 0.55, bikeH * 1.5);
+            ctx.lineTo(-bikeLen * 0.35, bikeH * 0.8);
+            ctx.closePath();
+            ctx.fill();
+
+            // Handlebars
+            ctx.strokeStyle = flash ? '#888' : '#555';
+            ctx.lineWidth = Math.max(1, sz * 0.06);
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.15, -bikeH * 1.8);
+            ctx.lineTo(-bikeLen * 0.15, bikeH * 1.8);
+            ctx.stroke();
+
+            // Control panel on handlebars
+            ctx.fillStyle = '#222';
+            ctx.fillRect(-bikeLen * 0.2, -bikeH * 0.5, sz * 0.4, bikeH);
+
+            // === SCOUT TROOPER ===
+            const trH = sz * 1.8;
+            const trW = sz * 0.9;
+            const trY = -bikeH - trH * 0.3;
+
+            // Legs (straddling bike)
+            ctx.fillStyle = flash ? '#e0e0e0' : '#c8c8c8';
+            // Left leg
+            ctx.fillRect(-bikeLen * 0.05 - trW * 0.15, trY + trH * 0.5, trW * 0.25, trH * 0.5);
+            // Right leg
+            ctx.fillRect(-bikeLen * 0.05 + trW * 0.15, trY + trH * 0.5, trW * 0.25, trH * 0.5);
+            // Boot details
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-bikeLen * 0.05 - trW * 0.15, trY + trH * 0.9, trW * 0.25, trH * 0.1);
+            ctx.fillRect(-bikeLen * 0.05 + trW * 0.15, trY + trH * 0.9, trW * 0.25, trH * 0.1);
+
+            // Body/torso
+            ctx.fillStyle = flash ? '#f0f0f0' : '#d8d8d8';
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.05 - trW * 0.35, trY + trH * 0.2);
+            ctx.lineTo(-bikeLen * 0.05 + trW * 0.35, trY + trH * 0.2);
+            ctx.lineTo(-bikeLen * 0.05 + trW * 0.3, trY + trH * 0.55);
+            ctx.lineTo(-bikeLen * 0.05 - trW * 0.3, trY + trH * 0.55);
+            ctx.closePath();
+            ctx.fill();
+
+            // Chest armor details
+            ctx.fillStyle = flash ? '#bbb' : '#999';
+            ctx.fillRect(-bikeLen * 0.05 - trW * 0.15, trY + trH * 0.25, trW * 0.3, trH * 0.08);
+
+            // Belt
+            ctx.fillStyle = '#333';
+            ctx.fillRect(-bikeLen * 0.05 - trW * 0.3, trY + trH * 0.48, trW * 0.6, trH * 0.05);
+
+            // Arms (reaching for handlebars)
+            ctx.fillStyle = flash ? '#e8e8e8' : '#ccc';
+            ctx.lineWidth = Math.max(1, trW * 0.22);
+            ctx.strokeStyle = ctx.fillStyle;
+            // Left arm
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.05 - trW * 0.35, trY + trH * 0.25);
+            ctx.lineTo(-bikeLen * 0.15, trY + trH * 0.4);
+            ctx.stroke();
+            // Right arm
+            ctx.beginPath();
+            ctx.moveTo(-bikeLen * 0.05 + trW * 0.35, trY + trH * 0.25);
+            ctx.lineTo(-bikeLen * 0.15, trY + trH * 0.4);
+            ctx.stroke();
+
+            // Helmet
+            const helmX = -bikeLen * 0.05;
+            const helmY = trY + trH * 0.1;
+            const helmR = trW * 0.32;
+
+            // Helmet base
+            ctx.fillStyle = flash ? '#f5f5f5' : '#e0e0e0';
+            ctx.beginPath();
+            ctx.arc(helmX, helmY, helmR, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Helmet visor
+            ctx.fillStyle = '#111';
+            ctx.beginPath();
+            ctx.ellipse(helmX, helmY + helmR * 0.1, helmR * 0.7, helmR * 0.35, 0, 0, Math.PI);
+            ctx.fill();
+
+            // Visor T-shape detail
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = Math.max(1, helmR * 0.08);
+            ctx.beginPath();
+            ctx.moveTo(helmX, helmY - helmR * 0.3);
+            ctx.lineTo(helmX, helmY + helmR * 0.2);
+            ctx.stroke();
+
+            // Forehead detail
+            ctx.fillStyle = flash ? '#ccc' : '#aaa';
+            ctx.fillRect(helmX - helmR * 0.5, helmY - helmR * 0.6, helmR, helmR * 0.15);
+
+            // Back of helmet (bump)
+            ctx.fillStyle = flash ? '#ddd' : '#c0c0c0';
+            ctx.beginPath();
+            ctx.ellipse(helmX, helmY - helmR * 0.3, helmR * 0.5, helmR * 0.25, 0, Math.PI, Math.PI * 2);
+            ctx.fill();
+
+            ctx.restore();
+        }
+
+        function drawPlayerLaser(b) {
+            const z = b.z;
+            if (z < 0.15) return;
+            const scale = 1 / z;
+            const sx = (b.x) * W * scale + W * 0.5;
+            const sy = (b.y) * H * scale + H * 0.5;
+
+            const trailDt = 0.012;
+            const prevZ = b.z - b.vz * trailDt;
+            if (prevZ < 0.1) return;
+            const prevScale = 1 / prevZ;
+            const prevX = ((b.x - b.vx * trailDt)) * W * prevScale + W * 0.5;
+            const prevY = ((b.y - b.vy * trailDt)) * H * prevScale + H * 0.5;
+
+            ctx.shadowColor = '#ff2020';
+            ctx.shadowBlur = 8;
+            ctx.strokeStyle = '#ff3030';
+            ctx.lineWidth = Math.max(2.5, 5 * scale);
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(prevX, prevY); ctx.stroke();
+
+            ctx.strokeStyle = '#ff8080';
+            ctx.lineWidth = Math.max(1.5, 3 * scale);
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(prevX, prevY); ctx.stroke();
+
+            ctx.strokeStyle = '#ffcccc';
+            ctx.lineWidth = Math.max(0.8, 1.5 * scale);
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(prevX, prevY); ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath(); ctx.arc(sx, sy, Math.max(1.5, 2.5 * scale), 0, Math.PI * 2); ctx.fill();
+        }
+
+        function drawEnemyLaser(b) {
+            const z = b.z;
+            if (z < 0.1) return;
+            const scale = 1 / z;
+            const sx = (b.x) * W * scale + W * 0.5;
+            const sy = (b.y) * H * scale + H * 0.5;
+
+            const trailDt = 0.02;
+            const prevZ = b.z - b.vz * trailDt;
+            if (prevZ < 0.05) return;
+            const prevScale = 1 / prevZ;
+            const prevX = ((b.x - b.vx * trailDt)) * W * prevScale + W * 0.5;
+            const prevY = ((b.y - b.vy * trailDt)) * H * prevScale + H * 0.5;
+
+            ctx.shadowColor = '#40ff40';
+            ctx.shadowBlur = 8;
+            ctx.strokeStyle = '#40ff40';
+            ctx.lineWidth = Math.max(2, 4 * scale);
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(prevX, prevY); ctx.stroke();
+
+            ctx.strokeStyle = '#a0ffa0';
+            ctx.lineWidth = Math.max(1, 2 * scale);
+            ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(prevX, prevY); ctx.stroke();
+            ctx.shadowBlur = 0;
+        }
+
+        function drawExplosion(ex) {
+            const z = ex.z;
+            if (z < 0.1) return;
+            const scale = 1 / z;
+            const sx = (ex.x) * W * scale + W * 0.5;
+            const sy = (ex.y) * H * scale + H * 0.5;
+            const p = ex.progress;
+            const r = (15 + p * 60) * scale;
+
+            if (p < 0.5) {
+                const fa = 1 - p * 2;
+                const grad = ctx.createRadialGradient(sx, sy, 0, sx, sy, r);
+                grad.addColorStop(0, `rgba(255,255,200,${fa})`);
+                grad.addColorStop(0.3, `rgba(255,160,40,${fa * 0.8})`);
+                grad.addColorStop(0.6, `rgba(255,60,10,${fa * 0.5})`);
+                grad.addColorStop(1, 'transparent');
+                ctx.fillStyle = grad;
+                ctx.beginPath(); ctx.arc(sx, sy, r, 0, Math.PI * 2); ctx.fill();
+            }
+
+            // Debris sparks
+            for (let i = 0; i < 10; i++) {
+                const a = (i / 10) * Math.PI * 2 + ex.spin;
+                const dist = r * (0.5 + p * 1.8);
+                const alpha = Math.max(0, 1 - p * 1.3);
+                ctx.fillStyle = i % 3 === 0 ? `rgba(200,200,200,${alpha})` :
+                    i % 3 === 1 ? `rgba(255,200,50,${alpha})` : `rgba(255,100,20,${alpha})`;
+                ctx.beginPath();
+                ctx.arc(sx + Math.cos(a) * dist, sy + Math.sin(a) * dist, Math.max(1, 2 * scale), 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        function drawCrosshair() {
+            const cx = crossX * W, cy = crossY * H;
+            const r = Math.min(W, H) * 0.02;
+
+            ctx.strokeStyle = 'rgba(255,100,100,0.7)';
+            ctx.lineWidth = 2;
+            // Circle
+            ctx.beginPath();
+            ctx.arc(cx, cy, r, 0, Math.PI * 2);
+            ctx.stroke();
+            // Cross lines
+            const gap = r * 0.4;
+            ctx.beginPath();
+            ctx.moveTo(cx, cy - r * 1.4); ctx.lineTo(cx, cy - gap);
+            ctx.moveTo(cx, cy + gap); ctx.lineTo(cx, cy + r * 1.4);
+            ctx.moveTo(cx - r * 1.4, cy); ctx.lineTo(cx - gap, cy);
+            ctx.moveTo(cx + gap, cy); ctx.lineTo(cx + r * 1.4, cy);
+            ctx.stroke();
+
+            ctx.fillStyle = 'rgba(255,100,100,0.8)';
+            ctx.beginPath(); ctx.arc(cx, cy, 2, 0, Math.PI * 2); ctx.fill();
+        }
+
+        // ===== SPEEDER BIKE HUD =====
+        function drawHUD() {
+            const s = Math.min(W, H);
+
+            // Speeder bike handlebars at bottom
+            const handleY = H * 0.88;
+
+            // Left handlebar grip
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.moveTo(W * 0.15, handleY);
+            ctx.lineTo(W * 0.22, handleY - H * 0.06);
+            ctx.lineTo(W * 0.28, handleY - H * 0.04);
+            ctx.lineTo(W * 0.32, handleY + H * 0.02);
+            ctx.lineTo(W * 0.30, handleY + H * 0.08);
+            ctx.lineTo(W * 0.18, handleY + H * 0.1);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Right handlebar grip
+            ctx.fillStyle = '#2a2a2a';
+            ctx.beginPath();
+            ctx.moveTo(W * 0.85, handleY);
+            ctx.lineTo(W * 0.78, handleY - H * 0.06);
+            ctx.lineTo(W * 0.72, handleY - H * 0.04);
+            ctx.lineTo(W * 0.68, handleY + H * 0.02);
+            ctx.lineTo(W * 0.70, handleY + H * 0.08);
+            ctx.lineTo(W * 0.82, handleY + H * 0.1);
+            ctx.closePath();
+            ctx.fill();
+            ctx.strokeStyle = '#444';
+            ctx.lineWidth = 1;
+            ctx.stroke();
+
+            // Center console between handles
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(W * 0.38, handleY - H * 0.01, W * 0.24, H * 0.08);
+            ctx.strokeStyle = '#333';
+            ctx.strokeRect(W * 0.38, handleY - H * 0.01, W * 0.24, H * 0.08);
+
+            // Speed indicator
+            ctx.fillStyle = '#40ff40';
+            ctx.font = `${s * 0.008}px 'Press Start 2P'`;
+            ctx.textAlign = 'center';
+            ctx.fillText('SPD ' + Math.floor(speed * 200), W * 0.5, handleY + H * 0.02);
+
+            // Speeder nose (center bottom)
+            ctx.fillStyle = '#222';
+            ctx.beginPath();
+            ctx.moveTo(W * 0.45, H * 0.96);
+            ctx.lineTo(W * 0.50, H * 0.85);
+            ctx.lineTo(W * 0.55, H * 0.96);
+            ctx.lineTo(W * 0.55, H);
+            ctx.lineTo(W * 0.45, H);
+            ctx.closePath();
+            ctx.fill();
+
+            // Gun flash at speeder nose tip
+            if (gunFlash > 0) {
+                ctx.fillStyle = `rgba(255,80,80,${gunFlash * 2})`;
+                ctx.shadowColor = '#ff4040';
+                ctx.shadowBlur = 15;
+                ctx.beginPath();
+                ctx.arc(W * 0.5, H * 0.85, s * 0.01, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.shadowBlur = 0;
+            }
+
+            // Damage flash
+            if (dmgFlash > 0) {
+                ctx.fillStyle = `rgba(255,40,20,${dmgFlash * 0.2})`;
+                ctx.fillRect(0, 0, W, H);
+            }
+
+            // HUD text
+            ctx.fillStyle = 'rgba(255,200,100,0.7)';
+            ctx.font = `${s * 0.01}px 'Press Start 2P'`;
+            ctx.textAlign = 'left';
+            ctx.fillText('SCORE ' + String(score).padStart(6, '0'), W * 0.03, H * 0.04);
+
+            ctx.textAlign = 'right';
+            ctx.fillText('WAVE ' + wave + '/' + MAX_WAVES, W * 0.97, H * 0.04);
+
+            ctx.textAlign = 'center';
+            ctx.fillText('SCOUTS ' + killed + '/' + waveTarget, W * 0.5, H * 0.04);
+
+            // Shield bar
+            const shPct = shields / 100;
+            const shColor = shPct > 0.5 ? '#40ff40' : (shPct > 0.25 ? '#ffaa20' : '#ff3030');
+            const barX = W * 0.03, barY = H * 0.06, barW = W * 0.12, barH = s * 0.008;
+            ctx.fillStyle = '#0a1a0a';
+            ctx.fillRect(barX, barY, barW, barH);
+            ctx.fillStyle = shColor;
+            ctx.fillRect(barX, barY, barW * shPct, barH);
+            ctx.strokeStyle = '#3a5a3a';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(barX, barY, barW, barH);
+
+            ctx.fillStyle = shColor;
+            ctx.font = `${s * 0.007}px 'Press Start 2P'`;
+            ctx.textAlign = 'left';
+            ctx.fillText('HULL', barX, barY - 3);
+
+            if (shields <= 25 && Math.floor(Date.now() / 300) % 2 === 0) {
+                ctx.fillStyle = '#ff2020';
+                ctx.fillText('⚠ CRITICAL', barX + barW + 8, barY + barH);
+            }
+        }
+
+        // ===== GAME LOGIC =====
+        function getWaveConfig(w) {
+            return {
+                target: 5 + w * 2,
+                spawnInt: Math.max(1200 - w * 80, 400),
+                maxOn: Math.min(4 + w, 10),
+            };
+        }
+
+        function spawnEnemy() {
+            const r = Math.random();
+            let x, y, z, vx, vy, vz, flyby = false;
+
+            if (r < 0.2) {
+                // Fly-by from left
+                x = -0.8; y = -0.05 + Math.random() * 0.15;
+                z = 1.0 + Math.random() * 1.5;
+                vx = 0.35 + Math.random() * 0.3;
+                vy = 0; vz = -0.05;
+                flyby = true;
+            } else if (r < 0.4) {
+                // Fly-by from right
+                x = 0.8; y = -0.05 + Math.random() * 0.15;
+                z = 1.0 + Math.random() * 1.5;
+                vx = -(0.35 + Math.random() * 0.3);
+                vy = 0; vz = -0.05;
+                flyby = true;
+            } else {
+                // Ahead on the path, weaving
+                x = (Math.random() - 0.5) * 0.4;
+                y = -0.1 + Math.random() * 0.1;
+                z = 4.5 + Math.random() * 2;
+                vx = (Math.random() - 0.5) * 0.15;
+                vy = 0;
+                vz = -(0.25 + Math.random() * 0.15 + wave * 0.03);
+            }
+
+            enemies.push({
+                x, y, z, vx, vy, vz,
+                alive: true, t: 0, flyby,
+                life: flyby ? 6000 : 12000,
+                shootCD: flyby ? 600 + Math.random() * 600 : 2000 + Math.random() * 2000,
+                flash: 0, hp: 1 + (wave > 4 ? 1 : 0),
+                screenX: 0, screenY: 0, screenSize: 0,
+                wobblePhase: Math.random() * Math.PI * 2,
+                wobbleSpd: 1 + Math.random() * 2,
+            });
+        }
+
+        function shoot() {
+            if (state !== 'playing') return;
+            sfx.play('laser');
+            gunFlash = 0.2;
+
+            const startZ = 0.2;
+            const targetZ = 3.5;
+            const gx = 0;
+            const gy = 0.25;
+            const tx = (crossX - 0.5) * targetZ;
+            const ty = (crossY - 0.5) * targetZ;
+
+            const dx = tx - gx, dy = ty - gy, dz = targetZ - startZ;
+            const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+            const spd = 6.0;
+
+            playerLasers.push({
+                x: gx, y: gy, z: startZ,
+                vx: (dx / d) * spd, vy: (dy / d) * spd, vz: (dz / d) * spd,
+            });
+        }
+
+        function takeDamage(amount) {
+            shields -= amount;
+            sfx.play('hit');
+            shakeTimer = 0.3;
+            dmgFlash = 1;
+            if (shields <= 0) {
+                shields = 0;
+                state = 'gameover'; sfx.play('gameover');
+                document.getElementById('finalScore').textContent = 'SCORE: ' + String(score).padStart(6, '0');
+                document.getElementById('gameOverOverlay').style.display = 'flex';
+            }
+        }
+
+        function startCountdown() {
+            state = 'countdown'; countdownPhase = 0; countdownTimer = 0;
+            enemies = []; explosions = []; playerLasers = []; enemyLasers = []; debris = [];
+            const cfg = getWaveConfig(wave);
+            waveTarget = cfg.target; spawnInterval = cfg.spawnInt; maxOnScreen = cfg.maxOn;
+            killed = 0; spawnTimer = 0;
+        }
+
+        function nextWave() {
+            if (wave >= MAX_WAVES) {
+                state = 'victory'; victoryTimer = 0; sfx.play('victory');
+                document.getElementById('winOverlay').style.display = 'flex';
+                return;
+            }
+            wave++; startCountdown();
+        }
+
+        function updateCountdown(dt) {
+            countdownTimer += dt * 1000;
+            if (countdownTimer >= CD_DUR[countdownPhase]) {
+                countdownTimer = 0; countdownPhase++;
+                if (countdownPhase >= 2 && countdownPhase <= 4) sfx.play('countdown');
+                if (countdownPhase === 5) sfx.play('go');
+                if (countdownPhase >= CD_DUR.length) { state = 'playing'; }
+            }
+        }
+
+        function drawCountdown() {
+            const cx = W / 2, cy = H * 0.35;
+            ctx.fillStyle = '#80ff40';
+            ctx.font = `${Math.min(W, H) * 0.018}px 'Press Start 2P'`;
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('WAVE ' + wave, cx, cy - Math.min(W, H) * 0.08);
+
+            const text = CD_TEXT[countdownPhase];
+            if (text) {
+                const isNum = ['3', '2', '1'].includes(text);
+                const isGo = text === 'PUNCH IT!';
+                const fontSize = isNum ? 0.08 : (isGo ? 0.04 : 0.014);
+                ctx.fillStyle = isGo ? '#ff4040' : '#ffcc40';
+                ctx.font = `${Math.min(W, H) * fontSize}px 'Press Start 2P'`;
+                ctx.fillText(text, cx, cy);
+            }
+        }
+
+        function drawVictory(dt) {
+            victoryTimer += dt;
+            const cx = W / 2, cy = H * 0.35;
+            const s = Math.min(W, H);
+            if (victoryTimer > 1.5) {
+                ctx.fillStyle = '#80ff40';
+                ctx.font = `${s * 0.035}px 'Press Start 2P'`;
+                ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                ctx.fillText('VICTORY', cx, cy);
+
+                ctx.fillStyle = '#ffcc40';
+                ctx.font = `${s * 0.014}px 'Press Start 2P'`;
+                ctx.fillText('ALL SCOUTS ELIMINATED', cx, cy + s * 0.07);
+                ctx.fillText('SCORE: ' + String(score).padStart(6, '0'), cx, cy + s * 0.12);
+
+                if (victoryTimer > 3.5 && Math.floor(victoryTimer * 2) % 2 === 0) {
+                    ctx.fillStyle = '#80ff80';
+                    ctx.font = `${s * 0.01}px 'Press Start 2P'`;
+                    ctx.fillText('CLICK OR PRESS ENTER', cx, cy + s * 0.2);
+                }
+            }
+        }
+
+        function update(dt) {
+            gameTime += dt;
+            dmgFlash = Math.max(0, dmgFlash - dt * 3);
+            gunFlash = Math.max(0, gunFlash - dt * 4);
+            if (shakeTimer > 0) {
+                shakeTimer -= dt;
+                shakeX = (Math.random() - 0.5) * 10;
+                shakeY = (Math.random() - 0.5) * 10;
+            } else { shakeX = 0; shakeY = 0; }
+
+            // Engine sound
+            engineTimer += dt;
+            if (state === 'playing' && engineTimer > 0.15) {
+                sfx.play('engine');
+                engineTimer = 0;
+            }
+
+            if (state === 'countdown') { updateCountdown(dt); }
+            if (state !== 'playing' && state !== 'countdown') return;
+
+            // Scroll trees
+            const scrollSpd = speed * 2.5 * dt;
+            trees.forEach(t => {
+                t.z -= scrollSpd;
+                if (t.z < 0.05) {
+                    Object.assign(t, makeTree(4.5 + Math.random() * 1.5));
+                }
+            });
+
+            groundFerns.forEach(f => {
+                f.z -= scrollSpd;
+                if (f.z < 0.1) {
+                    f.z = 3.5 + Math.random() * 1;
+                    f.x = (Math.random() - 0.5) * 1.6;
+                }
+            });
+
+            if (state !== 'playing') return;
+
+            // Crosshair
+            const cs = 0.8;
+            if (keys['ArrowLeft'] || keys['a']) crossX -= cs * dt;
+            if (keys['ArrowRight'] || keys['d']) crossX += cs * dt;
+            if (keys['ArrowUp'] || keys['w']) crossY -= cs * dt;
+            if (keys['ArrowDown'] || keys['s']) crossY += cs * dt;
+            crossX = Math.max(0.05, Math.min(0.95, crossX));
+            crossY = Math.max(0.05, Math.min(0.85, crossY));
+
+            // Camera pan
+            const targetCamX = (crossX - 0.5) * 0.4;
+            const targetCamY = (crossY - 0.4) * 0.3;
+            camX += (targetCamX - camX) * Math.min(1, dt * 5);
+            camY += (targetCamY - camY) * Math.min(1, dt * 5);
+
+            // Spawn
+            spawnTimer += dt * 1000;
+            if (spawnTimer >= spawnInterval && enemies.filter(e => e.alive).length < maxOnScreen) {
+                spawnEnemy(); spawnTimer = 0;
+            }
+
+            // Update enemies
+            enemies.forEach(e => {
+                if (!e.alive) return;
+                e.t += dt * 1000;
+
+                const wob = e.flyby ? 0.02 : 0.06;
+                e.x += e.vx * dt + Math.sin(e.t * 0.002 * e.wobbleSpd + e.wobblePhase) * wob * dt;
+                e.y += e.vy * dt;
+                e.z += e.vz * dt;
+
+                if (e.flyby && (e.x < -1.2 || e.x > 1.2)) { e.alive = false; return; }
+                if (e.z < 0.3) { e.alive = false; return; }
+                if (e.t > e.life) { e.alive = false; return; }
+
+                if (e.flash > 0) e.flash -= dt * 1000;
+
+                // Shoot
+                e.shootCD -= dt * 1000;
+                if (e.shootCD <= 0 && e.z < 3.5) {
+                    e.flash = 100;
+                    e.shootCD = Math.max(1200, 2500 - wave * 100) + Math.random() * 1500;
+                    sfx.play('laser');
+
+                    const dx = 0 - e.x + (Math.random() - 0.5) * 0.1;
+                    const dy = 0.2 - e.y;
+                    const dz = -e.z;
+                    const d = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    const bspd = 2.5;
+                    enemyLasers.push({
+                        x: e.x, y: e.y, z: e.z,
+                        vx: (dx / d) * bspd, vy: (dy / d) * bspd, vz: (dz / d) * bspd,
+                    });
+                }
+            });
+            enemies = enemies.filter(e => e.alive);
+
+            // Player lasers
+            playerLasers = playerLasers.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+                for (let e of enemies) {
+                    if (!e.alive) continue;
+                    const dx = b.x - e.x, dy = b.y - e.y, dz = b.z - e.z;
+                    const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+                    if (dist < 0.2) {
+                        if (e.hp > 1) { e.hp--; e.flash = 200; sfx.play('hit'); }
+                        else {
+                            e.alive = false;
+                            score += (e.flyby ? 800 : 500) * wave;
+                            killed++;
+                            sfx.play('explode');
+                            explosions.push({ x: e.x, y: e.y, z: e.z, progress: 0, spin: Math.random() * Math.PI * 2 });
+                        }
+                        return false;
+                    }
+                }
+                return b.z > 0 && b.z < 7;
+            });
+
+            // Enemy lasers
+            enemyLasers = enemyLasers.filter(b => {
+                b.x += b.vx * dt; b.y += b.vy * dt; b.z += b.vz * dt;
+                if (b.z < 0.15 && Math.abs(b.x) < 0.2 && Math.abs(b.y - 0.2) < 0.2) {
+                    takeDamage(8 + wave);
+                    return false;
+                }
+                return b.z > -0.5 && b.z < 7;
+            });
+
+            explosions.forEach(ex => { ex.progress += dt * 2.0; ex.spin += dt * 3; });
+            explosions = explosions.filter(ex => ex.progress < 1);
+
+            if (killed >= waveTarget) nextWave();
+        }
+
+        function draw(dt) {
+            ctx.clearRect(0, 0, W, H);
+
+            const camPxX = -camX * W;
+            const camPxY = -camY * H;
+
+            ctx.save();
+            ctx.translate(shakeX + camPxX, shakeY + camPxY);
+
+            drawSky();
+            drawGround();
+
+            // Sort all objects by depth
+            const all = [];
+            trees.forEach(t => all.push({ type: 'tree', obj: t, z: t.z }));
+            groundFerns.forEach(f => all.push({ type: 'fern', obj: f, z: f.z }));
+            enemies.forEach(e => { if (e.alive) all.push({ type: 'enemy', obj: e, z: e.z }); });
+            playerLasers.forEach(b => all.push({ type: 'plaser', obj: b, z: b.z }));
+            enemyLasers.forEach(b => all.push({ type: 'elaser', obj: b, z: b.z }));
+            explosions.forEach(ex => all.push({ type: 'explosion', obj: ex, z: ex.z }));
+
+            all.sort((a, b) => b.z - a.z);
+
+            all.forEach(o => {
+                if (o.type === 'tree') drawTree(o.obj);
+                else if (o.type === 'fern') drawFern(o.obj);
+                else if (o.type === 'enemy') drawScoutTrooper(o.obj);
+                else if (o.type === 'plaser') drawPlayerLaser(o.obj);
+                else if (o.type === 'elaser') drawEnemyLaser(o.obj);
+                else if (o.type === 'explosion') drawExplosion(o.obj);
+            });
+
+            ctx.restore();
+
+            // HUD fixed on screen
+            ctx.save();
+            ctx.translate(shakeX, shakeY);
+            drawHUD();
+
+            if (state === 'countdown') drawCountdown();
+
+            ctx.restore();
+
+            if (state === 'playing') {
+                ctx.save();
+                ctx.translate(shakeX + camPxX, shakeY + camPxY);
+                drawCrosshair();
+                ctx.restore();
+            }
+
+            if (state === 'victory') {
+                ctx.save();
+                ctx.translate(shakeX + camPxX, shakeY + camPxY);
+                drawVictory(dt);
+                ctx.restore();
+            }
+        }
+
+        function loop(ts) {
+            const dt = Math.min((ts - lastTime) / 1000, 0.05);
+            lastTime = ts;
+            resize(); update(dt); draw(dt);
+            requestAnimationFrame(loop);
+        }
+
+        function startGame() {
+            score = 0; shields = 100; wave = 1;
+            enemies = []; explosions = []; playerLasers = []; enemyLasers = []; debris = [];
+            crossX = 0.5; crossY = 0.35; camX = 0; camY = 0;
+            shakeTimer = 0; dmgFlash = 0; gunFlash = 0; gameTime = 0; speed = 1.0;
+            initTrees(); initFerns();
+            document.getElementById('startOverlay').style.display = 'none';
+            document.getElementById('gameOverOverlay').style.display = 'none';
+            document.getElementById('winOverlay').style.display = 'none';
+            sfx.init(); startCountdown();
+        }
+
+        // ===== INPUT =====
+        document.addEventListener('keydown', e => {
+            keys[e.key] = true;
+            if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+                else if (state === 'playing' && e.key === ' ') shoot();
+            }
+        });
+        document.addEventListener('keyup', e => { keys[e.key] = false; });
+
+        function screenToGame(clientX, clientY) {
+            const rect = canvas.getBoundingClientRect();
+            return {
+                x: Math.max(0.05, Math.min(0.95, (clientX - rect.left) / rect.width)),
+                y: Math.max(0.05, Math.min(0.85, (clientY - rect.top) / rect.height)),
+            };
+        }
+
+        canvas.addEventListener('mousemove', e => {
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.clientX, e.clientY);
+            crossX = pos.x; crossY = pos.y;
+        });
+
+        canvas.addEventListener('click', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') startGame();
+            else if (state === 'playing') {
+                const pos = screenToGame(e.clientX, e.clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        });
+
+        canvas.addEventListener('touchstart', e => {
+            e.preventDefault(); sfx.init();
+            if (state === 'start' || state === 'gameover' || state === 'victory') { startGame(); return; }
+            if (state === 'playing') {
+                const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+                crossX = pos.x; crossY = pos.y;
+                shoot();
+            }
+        }, { passive: false });
+
+        canvas.addEventListener('touchmove', e => {
+            e.preventDefault();
+            if (state !== 'playing') return;
+            const pos = screenToGame(e.touches[0].clientX, e.touches[0].clientY);
+            crossX = pos.x; crossY = pos.y;
+        }, { passive: false });
+
+        ['startOverlay', 'gameOverOverlay', 'winOverlay'].forEach(id => {
+            const el = document.getElementById(id);
+            el.addEventListener('click', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); });
+            el.addEventListener('touchstart', e => { e.preventDefault(); e.stopPropagation(); sfx.init(); startGame(); }, { passive: false });
+        });
+
+        initTrees(); initFerns();
+        requestAnimationFrame(loop);
+    </script>
+</body>
+
+</html>
